@@ -1,0 +1,54 @@
+# ---------------------------------------------------------------------------
+# Author:        David Gilinsky
+# File:          .gitignore
+# Purpose:       Git ignore rules: built images, base-image downloads, build and
+#                work trees, and secrets (Wi-Fi passphrases, env files).
+# Created:       2026-07-26
+# Last Modified: 2026-07-26
+# Version:       0.1.0
+# License:       GPL-3.0-or-later
+# ---------------------------------------------------------------------------
+
+# ---- Built images (huge; never commit) ----
+*.img
+*.img.xz
+*.img.gz
+*.img.zip
+*.zip
+*.iso
+*.wic
+*.wic.*
+
+# ---- Base-image downloads / caches ----
+/downloads/
+/cache/
+*.img.xz.sha256
+*.sha256
+
+# ---- Build / work / deploy trees ----
+/work/
+/build/
+/deploy/
+/stage/
+/out/
+/tmp/
+
+# ---- pi-gen (if used as a submodule or checkout) ----
+pi-gen/work/
+pi-gen/deploy/
+
+# ---- Secrets / local configuration ----
+# Wi-Fi / AP passphrases and any credentials must never be committed.
+*.env
+secrets/
+*.local
+*.local.conf
+
+# ---- OS / editor ----
+*~
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
