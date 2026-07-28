@@ -34,9 +34,11 @@ License:       GPL-3.0-or-later
 7. On the **Sensors** tab, add the SQM. On the **RPi** tab, set anything the
    site needs: an upstream network, the USB drive, the clock.
 
-The unit's SSID, passphrase, web address, and SSH password are also written to
+The unit's SSID, passphrase, and web address are also written to
 `nightwatcher-credentials.txt` on the boot partition, readable from any computer
-that can read the card.
+that can read the card. The shell account uses the fleet default password, the
+same on every unit, so a console is always a way in; change it per unit with
+`passwd` where a site requires that.
 
 ## Collecting data on a USB drive
 
@@ -72,8 +74,9 @@ WordPress. Data collection itself never needs it.
 
 ## When something is wrong
 
-Everything below runs over SSH as the `nightwatcher` user, with the password from
-`nightwatcher-credentials.txt`.
+Everything below runs as the `nightwatcher` user, over SSH or at a console with
+a monitor and keyboard, using the fleet default password (`nightwatcher` unless
+your network changed it).
 
 | Symptom | What to check |
 |---|---|

@@ -25,12 +25,32 @@ groupadd --force --system nightwatcher-pi
 EOF
 
 # The appliance is useless without these, and first boot has no network to
-# recover from a missed enable.
+# recover from a missed enable. They come either with Raspberry Pi OS or with
+# the packages installed above, whose postinst scripts already enable them, so
+# this asserts the state rather than forcing it. Forcing is actively wrong for
+# a unit the distribution ships masked: fake-hwclock.service is a tombstone
+# symlinked to /dev/null, its work having moved to fake-hwclock-load.service
+# and fake-hwclock-save.timer, both already enabled. Asking to enable it fails,
+# and failing here throws away an hour of build over a unit that was never
+# ours to enable.
 on_chroot << 'EOF'
 set -e
-systemctl enable mariadb.service
-systemctl enable avahi-daemon.service
-systemctl enable systemd-timesyncd.service
-systemctl enable fake-hwclock.service
-systemctl enable NetworkManager.service
+for unit in mariadb avahi-daemon systemd-timesyncd NetworkManager; do
+	state="$(systemctl is-enabled "${unit}" 2>/dev/null || true)"
+	case "${state}" in
+		enabled|enabled-runtime|static|indirect|alias|generated)
+			echo "nightwatcher-pi: ${unit} is ${state}" ;;
+		masked|masked-runtime)
+			echo "nightwatcher-pi: WARNING ${unit} is masked in this image; leaving it alone" ;;
+		*)
+			echo "nightwatcher-pi: enabling ${unit}"
+			systemctl enable "${unit}" ;;
+	esac
+done
+
+# The clock units the appliance actually depends on. Not enabled here (the
+# package does that); checked, because a unit whose readings are timestamped
+# from a 1970 clock is worse than one with no readings.
+systemctl is-enabled fake-hwclock-save.timer >/dev/null 2>&1 ||
+	echo "nightwatcher-pi: WARNING fake-hwclock-save.timer is not enabled"
 EOF

@@ -84,10 +84,15 @@ fi
 nw_log "this unit is ${HOSTNAME}"
 
 # ---- 3. per-unit secrets --------------------------------------------------
-# Everything below differs between units flashed from the same image. Anything
-# that did not would be a fleet-wide secret sitting in a public image.
+# The database password differs between units flashed from the same image:
+# nobody ever types it, so there is no reason for it to be shared.
+#
+# The login password deliberately is shared, and is not touched here. It was
+# rotated to a per-unit value once, and the result was a unit whose password
+# existed only on a boot partition that a Compute Module cannot show you
+# without another rpiboot session. A volunteer standing in front of a unit with
+# a keyboard has to be able to log in to it.
 DB_PASS="$(openssl rand -hex 24)"
-SSH_PASS="$(openssl rand -base64 12 | tr -d '/+=' | cut -c1-12)"
 
 umask 077
 tmp="$(mktemp /etc/nightwatcher/nightwatcher.env.XXXXXX)"
@@ -99,12 +104,6 @@ mv "${tmp}" /etc/nightwatcher/nightwatcher.env
 chmod 600 /etc/nightwatcher/nightwatcher.env
 umask 022
 
-# The recovery account. pi-gen had to bake some password to create the account
-# at all; this replaces it with one that exists only on this unit.
-if id -u "${FIRST_USER_NAME:-nightwatcher}" >/dev/null 2>&1; then
-	printf '%s:%s\n' "${FIRST_USER_NAME:-nightwatcher}" "${SSH_PASS}" | chpasswd ||
-		nw_warn "could not rotate the recovery account password"
-fi
 
 # ---- 4. the database ------------------------------------------------------
 # MariaDB's root account authenticates over the local socket, so this needs no
@@ -175,9 +174,13 @@ Web UI (join the network above first)
   The certificate is self-signed, so the browser warns once. That is expected.
   Sign in as 'admin' with password 'admin'; you must change it immediately.
 
-Recovery account (SSH, this unit only)
+Shell account (console and SSH)
   User:       ${FIRST_USER_NAME:-nightwatcher}
-  Password:   ${SSH_PASS}
+  Password:   the fleet default, documented in the deployment guide
+
+  This one is the same on every unit, so that a volunteer with a keyboard can
+  always log in to the unit in front of them. Change it per unit with 'passwd'
+  where a site needs that.
 
 Keep this file. Deleting it does not change any of the above.
 EOF

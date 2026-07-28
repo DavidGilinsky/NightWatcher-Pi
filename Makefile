@@ -52,15 +52,16 @@ $(PIGEN)/build.sh:
 .PHONY: pi-gen
 pi-gen: $(PIGEN)/build.sh  ## Check out the pinned pi-gen tree
 
-# The generated config carries a per-build random account password. pi-gen needs
-# one to create the account at all; first boot immediately rotates it to a
-# per-unit value, so this never becomes a fleet-wide secret.
+# The account password comes from versions.env and stays put: it is the
+# documented fleet default a volunteer types at a console, not a secret. It was
+# once generated here per build, which locked the builder out of their own image
+# the moment anything regenerated this file.
 $(CONFIG): config/pi-gen.config.in versions.env | pi-gen
 	@mkdir -p $(WORK)
 	@sed -e 's|@IMG_NAME@|$(IMG_NAME)|g' \
 	     -e 's|@RELEASE@|$(RELEASE)|g' \
 	     -e 's|@FIRST_USER_NAME@|$(FIRST_USER_NAME)|g' \
-	     -e "s|@FIRST_USER_PASS@|$$(openssl rand -hex 16)|g" \
+	     -e 's|@FIRST_USER_PASS@|$(FIRST_USER_PASS)|g' \
 	     -e 's|@ENABLE_SSH@|$(ENABLE_SSH)|g' \
 	     -e 's|@LOCALE_DEFAULT@|$(LOCALE_DEFAULT)|g' \
 	     -e 's|@KEYBOARD_KEYMAP@|$(KEYBOARD_KEYMAP)|g' \
@@ -72,6 +73,7 @@ $(CONFIG): config/pi-gen.config.in versions.env | pi-gen
 	     -e 's|@AP_PASSPHRASE@|$(AP_PASSPHRASE)|g' \
 	     -e 's|@AP_ADDRESS@|$(AP_ADDRESS)|g' \
 	     -e 's|@AP_CHANNEL@|$(AP_CHANNEL)|g' \
+	     -e 's|@PIGEN_REF@|$(PIGEN_REF)|g' \
 	     config/pi-gen.config.in > $(CONFIG)
 	@chmod 600 $(CONFIG)
 	@echo "[config] wrote $(CONFIG)"
@@ -84,6 +86,8 @@ stage: pi-gen deb
 	@cp -a $(STAGE) $(PIGEN)/$(STAGE)
 	@mkdir -p $(PIGEN)/$(STAGE)/01-nightwatcher/files
 	@cp -f $(DEB_DIR)/nightwatcher_*_arm64.deb $(PIGEN)/$(STAGE)/01-nightwatcher/files/
+	@mkdir -p $(PIGEN)/$(STAGE)/06-release/files
+	@cp -f $(DEB_DIR)/deb-source.env $(PIGEN)/$(STAGE)/06-release/files/
 	@touch $(PIGEN)/stage2/SKIP_IMAGES
 	@printf '%s\n' "$(NWPI_VERSION)" > $(PIGEN)/$(STAGE)/VERSION
 	@echo "[stage] grafted $(STAGE) with $$(basename $$(ls $(DEB_DIR)/nightwatcher_*_arm64.deb))"
@@ -96,8 +100,28 @@ preflight:  ## Check this host can build an image at all
 
 .PHONY: image
 image: preflight stage $(CONFIG)  ## Build the image in Docker (the usual way)
-	@echo "[image] building; this takes a while and needs disk"
-	cd $(PIGEN) && ./build-docker.sh -c $(CONFIG)
+	@echo "[image] full build; this takes a while and needs disk"
+	@rm -f $(PIGEN)/stage0/SKIP $(PIGEN)/stage1/SKIP $(PIGEN)/stage2/SKIP
+	@docker rm -v pigen_work pigen_work_cont 2>/dev/null || true
+	cd $(PIGEN) && PRESERVE_CONTAINER=1 ./build-docker.sh -c $(CONFIG)
+	@$(MAKE) --no-print-directory record-base
+	@$(MAKE) --no-print-directory collect
+
+# Stamp the work volume with the settings its base stages were built from, so a
+# later resume can prove it is reusing a base that still matches.
+.PHONY: record-base
+record-base:
+	@vol=$$(docker inspect pigen_work --format '{{range .Mounts}}{{if eq .Destination "/pi-gen/work"}}{{.Name}}{{end}}{{end}}' 2>/dev/null | tr -d '[:space:]'); \
+	if [ -n "$$vol" ]; then \
+		scripts/base-fingerprint.sh $(CONFIG) > $(WORK)/.base-fingerprint; \
+		docker run --rm -v "$$vol":/w -v $(WORK)/.base-fingerprint:/f:ro \
+			alpine cp /f /w/.base-config-fingerprint >/dev/null 2>&1 && \
+			echo "[image] recorded the base-stage fingerprint for future resumes"; \
+	fi
+
+.PHONY: image-resume
+image-resume: preflight stage $(CONFIG)  ## Rebuild only our stage, reusing the base from the last build
+	@scripts/resume-stage.sh
 	@$(MAKE) --no-print-directory collect
 
 .PHONY: image-native

@@ -31,13 +31,39 @@ apt-get install -y /var/cache/nightwatcher-pi/nightwatcher.deb
 rm -f /var/cache/nightwatcher-pi/nightwatcher.deb
 
 # Prove the package landed the way the image depends on it landing, while a
-# failure is still a build failure rather than a dead unit in the field.
-test -x /usr/local/nightwatcher/bin/nightwatcherd
-test -f /etc/nightwatcher/nightwatcher.conf
-test -L /etc/systemd/system/nightwatcherd.service
-test -L /etc/udev/rules.d/99-nightwatcher-sqm.rules
-grep -q '^bind = 0.0.0.0' /etc/nightwatcher/nightwatcher.conf
-grep -q '^tls = on' /etc/nightwatcher/nightwatcher.conf
+# failure is still a build failure rather than a dead unit in the field. Each
+# check names itself: a bare `test` under `set -e` ends an hour-long build in
+# silence, leaving nothing to debug but the exit status.
+fails=0
+check() {  # check DESCRIPTION TEST...
+	description="$1"
+	shift
+	if "$@"; then
+		printf 'nightwatcher: ok   %s\n' "${description}"
+	else
+		printf 'nightwatcher: FAIL %s\n' "${description}"
+		fails=$((fails + 1))
+	fi
+}
+
+check "daemon installed"     test -x /usr/local/nightwatcher/bin/nightwatcherd
+check "config seeded"        test -f /etc/nightwatcher/nightwatcher.conf
+check "systemd unit linked"  test -L /etc/systemd/system/nightwatcherd.service
+check "udev rule linked"     test -L /etc/udev/rules.d/99-nightwatcher-sqm.rules
+# Whitespace-tolerant: these values travel through debconf and are written back
+# by the package's own postinst, so their exact spacing is not ours to assume.
+check "web UI bound to every interface" \
+	grep -Eq '^[[:space:]]*bind[[:space:]]*=[[:space:]]*0\.0\.0\.0[[:space:]]*$' \
+	/etc/nightwatcher/nightwatcher.conf
+check "web UI serves TLS" \
+	grep -Eq '^[[:space:]]*tls[[:space:]]*=[[:space:]]*on[[:space:]]*$' \
+	/etc/nightwatcher/nightwatcher.conf
+
+if [ "${fails}" -ne 0 ]; then
+	echo "nightwatcher: ${fails} post-install check(s) failed; see above" >&2
+	grep -nE '^\[|^(bind|port|tls|host) ' /etc/nightwatcher/nightwatcher.conf >&2 || true
+	exit 1
+fi
 EOF
 
 # The export spool. A "USB destination" is a DSN export target writing here on

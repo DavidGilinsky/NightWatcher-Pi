@@ -19,12 +19,25 @@ NW2_DEB_VERSION="$(awk '/^Package: nightwatcher$/ { found = 1 }
 	"${ROOTFS_DIR}/var/lib/dpkg/status" 2>/dev/null)"
 NW2_DEB_VERSION="${NW2_DEB_VERSION:-unknown}"
 
+# Where the package actually came from, recorded by the fetch script rather
+# than assumed here. NW2_VERSION is what the build asked for; when no such
+# release exists the fetch falls back to a CI artifact, and a stamp that named
+# the release regardless would make an unpinned image indistinguishable from a
+# reproducible one. This file exists to be trusted or it is not worth writing.
+NW2_SOURCE="unknown"
+NW2_VERIFIED="no"
+if [ -r files/deb-source.env ]; then
+	# shellcheck source=/dev/null
+	. files/deb-source.env
+fi
+
 cat > "${ROOTFS_DIR}/etc/nightwatcher-pi-release" << EOF
 # What this image is made of. Report these when asking for help with a unit.
 NWPI_VERSION=${NWPI_VERSION:-0.1.0}
 NWPI_BUILD_DATE=$(date -u '+%Y-%m-%d')
-NW2_RELEASE=${NW2_VERSION:-unknown}
 NW2_PACKAGE_VERSION=${NW2_DEB_VERSION}
+NW2_SOURCE=${NW2_SOURCE}
+NW2_CHECKSUM_VERIFIED=${NW2_VERIFIED}
 BASE_OS=Raspberry Pi OS Lite (${RELEASE:-trixie}, arm64)
 PIGEN_REF=${PIGEN_REF:-unknown}
 EOF

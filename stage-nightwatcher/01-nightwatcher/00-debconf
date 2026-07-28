@@ -11,21 +11,26 @@
 # Version:       0.1.0
 # License:       GPL-3.0-or-later
 # ---------------------------------------------------------------------------
+#
+# One space between fields, and never more. debconf-set-selections takes the
+# entire remainder of the line as the value, so aligning these into columns
+# prefixes every value with the padding: an image built with "string  0.0.0.0"
+# writes "bind =  0.0.0.0" into the config, value silently indented.
 
 # Deliberately blank: a password baked into the image would be the same on every
 # unit ever flashed from it. First boot generates one per unit.
 nightwatcher nightwatcher/db_password password
-nightwatcher nightwatcher/db_host     string  127.0.0.1
+nightwatcher nightwatcher/db_host string 127.0.0.1
 
 # Deferred to first boot, which has the password to create the user with.
-nightwatcher nightwatcher/db_create   boolean false
+nightwatcher nightwatcher/db_create boolean false
 
 # Serve the web UI on every interface: the point of the appliance is that a
 # phone joining the access point can reach it. Bound off localhost, the daemon
 # requires a login for reads as well as writes.
-nightwatcher nightwatcher/api_bind    string  0.0.0.0
-nightwatcher nightwatcher/api_port    string  8080
-nightwatcher nightwatcher/api_tls     boolean true
+nightwatcher nightwatcher/api_bind string 0.0.0.0
+nightwatcher nightwatcher/api_port string 8080
+nightwatcher nightwatcher/api_tls boolean true
 
 # Started by first boot, once there is a database to talk to.
-nightwatcher nightwatcher/start_now   boolean false
+nightwatcher nightwatcher/start_now boolean false

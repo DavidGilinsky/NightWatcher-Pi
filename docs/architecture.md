@@ -72,18 +72,26 @@ stands in, so the unit is still nameable.
 
 ### Secrets: per unit, generated on first boot
 
-The image contains no credential that would be shared between units. The database
-password and the recovery account password are generated in
-[`nightwatcher-firstboot.sh`](../stage-nightwatcher/03-firstboot/files/nightwatcher-firstboot.sh)
-and written to `/boot/firmware/nightwatcher-credentials.txt`, which is FAT and so
-readable from any laptop. The NightWatcher2 preseed deliberately leaves
-`db_password` blank and sets `db_create=false` and `start_now=false`, deferring
-both to the unit that actually exists.
+The **database password** is generated per unit in
+[`nightwatcher-firstboot.sh`](../stage-nightwatcher/03-firstboot/files/nightwatcher-firstboot.sh),
+because nobody ever types it, so there is no reason for it to be shared. The
+NightWatcher2 preseed leaves `db_password` blank and sets `db_create=false` and
+`start_now=false`, deferring both to the unit that actually exists.
 
-The one deliberate exception is the **access-point passphrase**, which is a
-documented fleet default. A per-unit random passphrase is more secure and less
-usable: a volunteer standing at a sealed enclosure cannot read a passphrase that
-was generated after the card went in. It is changeable per unit from the tab.
+The two credentials a **human types** are documented fleet defaults instead: the
+**access-point passphrase** and the **shell account password**. Both were
+considered as per-unit random values and both failed the same test. A generated
+password can only be read from the boot partition, and on a Compute Module that
+means another `rpiboot` session, so a volunteer standing in front of a unit with
+a monitor and keyboard cannot log in to the machine in front of them. This was
+not theoretical: an early image did rotate the login password on first boot, and
+the result was an unreachable unit on a bench with a console attached.
+
+The cost is real and worth stating plainly: one password opens every unit built
+from an image, and SSH is on. Anyone within radio range who knows the defaults
+has a sudo-capable shell. Sites needing better change it per unit with `passwd`,
+or disable password authentication and deploy keys. The access-point passphrase
+is changeable per unit from the RPi tab.
 
 ### Configuration channels
 

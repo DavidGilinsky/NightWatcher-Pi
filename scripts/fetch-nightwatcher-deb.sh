@@ -22,6 +22,17 @@ DEST="${REPO_ROOT}/downloads"
 mkdir -p "${DEST}"
 
 log() { printf '[fetch-deb] %s\n' "$*"; }
+
+# Record where the package really came from. /etc/nightwatcher-pi-release exists
+# so a unit in the field can be traced back to its inputs, and a stamp that
+# names the pinned release when the build actually fell back to a CI artifact is
+# worse than no stamp at all.
+provenance() {  # provenance SOURCE VERIFIED
+    cat > "${DEST}/deb-source.env" << EOF
+NW2_SOURCE='$1'
+NW2_VERIFIED='$2'
+EOF
+}
 die() { printf '[fetch-deb] ERROR: %s\n' "$*" >&2; exit 1; }
 
 # ---- 1. an explicit local package wins, for pre-release testing ----
@@ -33,6 +44,7 @@ if [ -n "${NW2_DEB:-}" ]; then
     esac
     rm -f "${DEST}"/nightwatcher_*.deb
     cp -f "${NW2_DEB}" "${DEST}/"
+    provenance "local file $(basename "${NW2_DEB}")" "no"
     log "using local package $(basename "${NW2_DEB}") (UNVERIFIED: no release checksum)"
     exit 0
 fi
@@ -59,6 +71,7 @@ if gh release view "${NW2_VERSION}" --repo "${NW2_REPO}" >/dev/null 2>&1; then
 
     rm -f "${DEST}"/nightwatcher_*.deb
     cp -f "${deb}" "${DEST}/"
+    provenance "release ${NW2_VERSION}" "yes"
     log "using $(basename "${deb}") from release ${NW2_VERSION}"
     exit 0
 fi
@@ -82,4 +95,5 @@ deb="$(find "${tmp}" -maxdepth 1 -name 'nightwatcher_*.deb' -print -quit)"
 
 rm -f "${DEST}"/nightwatcher_*.deb
 cp -f "${deb}" "${DEST}/"
+provenance "CI run ${run_id} on main" "no"
 log "using $(basename "${deb}") from CI run ${run_id} (UNPINNED: tag a release for reproducible images)"

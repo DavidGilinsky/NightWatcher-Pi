@@ -23,9 +23,10 @@ collected either over the internet or on a USB drive carried home.
 - Writes its DSN data to a local spool nightly and **mirrors that spool onto any
   USB drive labelled `NWDATA`** the moment one is plugged in. The drive is
   mounted only while writing, so it can be swapped without ejecting anything.
-- Generates its own database password, SSH password, and identity on first boot,
-  and writes the ones a human needs to
-  `/boot/firmware/nightwatcher-credentials.txt`.
+- Derives its identity and generates its own database password on first boot,
+  and writes what a human needs to `/boot/firmware/nightwatcher-credentials.txt`.
+  The Wi-Fi passphrase and the shell account password are documented fleet
+  defaults, so a volunteer standing at a unit can always get into it.
 
 ## Building an image
 

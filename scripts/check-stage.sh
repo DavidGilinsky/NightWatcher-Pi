@@ -103,10 +103,40 @@ check "the sentinel the script writes matches the unit's" \
 # shellcheck disable=SC2016
 check "the database password is generated, not baked" \
 	grep -q 'DB_PASS="\$(openssl rand' "${STAGE}/03-firstboot/files/nightwatcher-firstboot.sh"
+# The login password is a documented fleet default and must survive first boot.
+# Rotating it to a per-unit value once produced a unit that could not be logged
+# in to from its own console, because the new password existed only on a boot
+# partition a Compute Module cannot show you without rpiboot.
+check "first boot does not rotate the login password" \
+	bash -c "! grep -q 'chpasswd' '${STAGE}/03-firstboot/files/nightwatcher-firstboot.sh'"
+check "the login password is pinned, not generated" \
+	grep -qE '^FIRST_USER_PASS=.+' versions.env
+check "the database password is still per unit" \
+	grep -q 'openssl rand' "${STAGE}/03-firstboot/files/nightwatcher-firstboot.sh"
 check "the preseed does not carry a password" \
 	bash -c "grep -q '^nightwatcher nightwatcher/db_password password\$' '${STAGE}/01-nightwatcher/00-debconf'"
 check "the preseed defers database creation" \
-	grep -q 'db_create   boolean false' "${STAGE}/01-nightwatcher/00-debconf"
+	grep -q 'db_create boolean false' "${STAGE}/01-nightwatcher/00-debconf"
+# debconf-set-selections takes the whole remainder of the line as the value, so
+# padding used to line values up ends up inside them: "string  0.0.0.0" becomes
+# a bind address with a leading space. Every directive is single-spaced, and is
+# owner, question, type, and at most one value.
+check "no padding hiding inside a preseed value" \
+	bash -c "! grep -qE '^nightwatcher .*[[:space:]]{2,}' '${STAGE}/01-nightwatcher/00-debconf'"
+check "every preseed line is well formed" \
+	bash -c "! grep -qvE '^(#.*)?\$|^nightwatcher nightwatcher/[a-z_]+ (password|string|boolean)( [^[:space:]]+)?\$' '${STAGE}/01-nightwatcher/00-debconf'"
+
+echo "[check] provenance"
+# /etc/nightwatcher-pi-release is only worth writing if it can be trusted, so
+# it must report the package source the fetch recorded, never the version the
+# build merely asked for.
+# shellcheck disable=SC2016
+check "the release stamp reports the real package source" \
+	grep -q 'NW2_SOURCE=\${NW2_SOURCE}' "${STAGE}/06-release/00-run.sh"
+check "the release stamp does not claim the requested release" \
+	bash -c "! grep -q 'NW2_RELEASE=' '${STAGE}/06-release/00-run.sh'"
+check "the fetch records what it used, on every path" \
+	bash -c "[ \"\$(grep -c '^ *provenance ' scripts/fetch-nightwatcher-deb.sh)\" -eq 3 ]"
 
 echo "[check] usb"
 check "udev rule and script agree on the label" \
