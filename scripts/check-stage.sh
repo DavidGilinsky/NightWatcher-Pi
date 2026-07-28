@@ -117,6 +117,13 @@ check "first boot never blocks on a unit ordered after it" \
 	bash -c "! grep -E '^[[:space:]]*systemctl restart ' '${STAGE}/03-firstboot/files/nightwatcher-firstboot.sh' | grep -qv -- '--no-block'"
 check "the login password is pinned, not generated" \
 	grep -qE '^FIRST_USER_PASS=.+' versions.env
+# --force is a repair tool. Rewriting the env file with a password the database
+# has not accepted turns a half-working unit into one whose daemon cannot
+# connect at all, so the write happens only after a successful test login.
+check "the database password is only recorded once the database accepts it" \
+	bash -c "awk '/nightwatcher.env.XXXXXX/ {found=NR} /mariadb -u nightwatcher/ {ok=NR} END {exit !(ok && found && ok < found)}' '${STAGE}/03-firstboot/files/nightwatcher-firstboot.sh'"
+check "re-provisioning keeps a working database password" \
+	grep -q 'keeping the existing database password' "${STAGE}/03-firstboot/files/nightwatcher-firstboot.sh"
 check "the database password is still per unit" \
 	grep -q 'openssl rand' "${STAGE}/03-firstboot/files/nightwatcher-firstboot.sh"
 check "the preseed does not carry a password" \

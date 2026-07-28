@@ -92,17 +92,23 @@ nw_log "this unit is ${HOSTNAME}"
 # existed only on a boot partition that a Compute Module cannot show you
 # without another rpiboot session. A volunteer standing in front of a unit with
 # a keyboard has to be able to log in to it.
-DB_PASS="$(openssl rand -hex 24)"
-
-umask 077
-tmp="$(mktemp /etc/nightwatcher/nightwatcher.env.XXXXXX)"
+# Re-provisioning must not invent a password the database has not agreed to.
+# Generating one unconditionally, writing it here, and only then asking MariaDB
+# to accept it means any failure in between leaves this file and the database
+# disagreeing: the daemon cannot connect at all, restarts forever, and never
+# serves the web UI. That is a worse state than whatever --force was run to
+# repair, so the existing password is kept whenever the database still takes it.
+DB_PASS=""
+DB_PASS_IS_NEW=0
 if [ -f /etc/nightwatcher/nightwatcher.env ]; then
-	grep -v '^[[:space:]]*NW_DB_PASSWORD=' /etc/nightwatcher/nightwatcher.env >> "${tmp}" 2>/dev/null || true
+	DB_PASS="$(sed -n 's/^[[:space:]]*NW_DB_PASSWORD=//p' /etc/nightwatcher/nightwatcher.env | tail -1)"
 fi
-printf 'NW_DB_PASSWORD=%s\n' "${DB_PASS}" >> "${tmp}"
-mv "${tmp}" /etc/nightwatcher/nightwatcher.env
-chmod 600 /etc/nightwatcher/nightwatcher.env
-umask 022
+if [ -n "${DB_PASS}" ] && mariadb -u nightwatcher -p"${DB_PASS}" -e 'SELECT 1' >/dev/null 2>&1; then
+	nw_log "keeping the existing database password; the database still accepts it"
+else
+	DB_PASS="$(openssl rand -hex 24)"
+	DB_PASS_IS_NEW=1
+fi
 
 
 # ---- 4. the database ------------------------------------------------------
@@ -128,9 +134,29 @@ GRANT ALL PRIVILEGES ON \`nightwatcher\`.* TO 'nightwatcher'@'127.0.0.1';
 FLUSH PRIVILEGES;
 SQL
 	then
-		nw_log "database and user created"
+		nw_log "database and user are ready"
 	else
 		nw_warn "could not create the database; the web UI's Database tab can finish this"
+	fi
+
+	# Only record the password once the database has actually accepted it. The
+	# env file is what the daemon reads, so writing an unverified value there is
+	# how a unit ends up with a running database it cannot log in to.
+	if mariadb -u nightwatcher -p"${DB_PASS}" -e 'SELECT 1' >/dev/null 2>&1; then
+		if [ "${DB_PASS_IS_NEW}" -eq 1 ]; then
+			umask 077
+			tmp="$(mktemp /etc/nightwatcher/nightwatcher.env.XXXXXX)"
+			if [ -f /etc/nightwatcher/nightwatcher.env ]; then
+				grep -v '^[[:space:]]*NW_DB_PASSWORD=' /etc/nightwatcher/nightwatcher.env >> "${tmp}" 2>/dev/null || true
+			fi
+			printf 'NW_DB_PASSWORD=%s\n' "${DB_PASS}" >> "${tmp}"
+			mv "${tmp}" /etc/nightwatcher/nightwatcher.env
+			chmod 600 /etc/nightwatcher/nightwatcher.env
+			umask 022
+			nw_log "database password recorded"
+		fi
+	else
+		nw_warn "the database did not accept the password; leaving /etc/nightwatcher/nightwatcher.env untouched so a working login is not overwritten"
 	fi
 else
 	nw_warn "MariaDB did not become reachable; the daemon will retry as it restarts"
