@@ -35,10 +35,13 @@ case "${host_arch}" in
 		if ! command -v qemu-aarch64 >/dev/null 2>&1; then
 			problem "qemu-aarch64 is missing, so an arm64 rootfs cannot be built on ${host_arch}.
 
-    sudo apt install qemu-user-binfmt qemu-user-static binfmt-support
+    sudo apt install qemu-user
 
-  qemu-user-static on its own does not satisfy pi-gen: it looks for the
-  dynamically linked qemu-aarch64 and registers that one for binfmt."
+  Not qemu-user-binfmt, which pi-gen's own message suggests: that package
+  conflicts with qemu-user-static, which docker's multi-arch support uses.
+  qemu-user ships the same /usr/bin/qemu-aarch64 and conflicts with nothing.
+  The emulation that does the real work runs inside pi-gen's container; this
+  binary only satisfies its precondition check."
 		fi
 		[ -f /proc/sys/fs/binfmt_misc/register ] ||
 			problem "binfmt_misc is not mounted. 'sudo mount binfmt_misc -t binfmt_misc /proc/sys/fs/binfmt_misc', or install binfmt-support."

@@ -32,13 +32,19 @@ collected either over the internet or on a USB drive carried home.
 Needs Docker, `git`, `make`, `openssl`, and the `gh` CLI. Everything else is
 pinned in [versions.env](versions.env).
 
-On an **x86_64** host, pi-gen also needs arm64 emulation. `qemu-user-static`
-alone is not enough: pi-gen looks for the dynamically linked `qemu-aarch64` and
-registers that one for binfmt.
+On an **x86_64** host, pi-gen checks for `/usr/bin/qemu-aarch64` before it will
+start, which `qemu-user-static` does not provide:
 
 ```sh
-sudo apt install qemu-user-binfmt qemu-user-static binfmt-support
+sudo apt install qemu-user
 ```
+
+Not `qemu-user-binfmt`, which is what pi-gen's own error message suggests: that
+package **conflicts with `qemu-user-static`**, which Docker's multi-arch support
+uses, so installing it means removing that. `qemu-user` ships the same binary and
+conflicts with nothing. The emulation that does the real work happens inside
+pi-gen's container, which carries its own qemu; the host binary only satisfies
+the precondition check.
 
 An **arm64** host (including CI on `ubuntu-24.04-arm`, which is how release
 images are built) needs none of that.
