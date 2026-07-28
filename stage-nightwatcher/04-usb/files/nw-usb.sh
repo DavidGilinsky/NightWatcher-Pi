@@ -26,7 +26,11 @@ LOCK=/run/nightwatcher-usb.lock
 BY_LABEL="/dev/disk/by-label/${USB_LABEL}"
 UNIT="$(hostname)"
 
-usb_device() { readlink -f "${BY_LABEL}" 2>/dev/null; }
+# -e, not -f: readlink -f canonicalises a path whose last component does not
+# exist, so it happily returns /dev/disk/by-label/NWDATA on a unit with no
+# drive plugged in at all. Every hourly run then reported a drive present and
+# warned that it could not be mounted. -e requires the whole path to exist.
+usb_device() { readlink -e "${BY_LABEL}" 2>/dev/null; }
 
 # ---- status ---------------------------------------------------------------
 cmd_status() {

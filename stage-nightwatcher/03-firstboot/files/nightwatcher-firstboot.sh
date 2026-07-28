@@ -139,6 +139,30 @@ SQL
 		nw_warn "could not create the database; the web UI's Database tab can finish this"
 	fi
 
+	# Load the tables here rather than leaving the daemon to bootstrap itself.
+	# A database with no tables at all was enough to keep nightwatcherd in a
+	# restart loop, reporting a connection failure while its credentials were
+	# perfectly good, because it recorded a startup event before creating the
+	# table that event goes into. That is fixed upstream, but an appliance
+	# should not depend on the order in which some future package version does
+	# its own setup: the unit that owns the database creates the schema in it.
+	# schema.sql is written with CREATE TABLE IF NOT EXISTS, so this is
+	# idempotent and safe on every re-provision.
+	SCHEMA="$(sed -n 's/^[[:space:]]*schema_file[[:space:]]*=[[:space:]]*//p' \
+		/etc/nightwatcher/nightwatcher.conf 2>/dev/null | tail -1)"
+	[ -n "${SCHEMA}" ] || SCHEMA=/usr/local/nightwatcher/sql/schema.sql
+	if [ -r "${SCHEMA}" ]; then
+		if mariadb nightwatcher < "${SCHEMA}" >/dev/null 2>&1; then
+			nw_log "schema loaded from ${SCHEMA} ($(mariadb -N -B -e \
+				"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='nightwatcher';" \
+				2>/dev/null || printf '?') tables)"
+		else
+			nw_warn "could not load ${SCHEMA}; the web UI's Database tab can finish this"
+		fi
+	else
+		nw_warn "no schema file at ${SCHEMA}; leaving the tables to the daemon"
+	fi
+
 	# Only record the password once the database has actually accepted it. The
 	# env file is what the daemon reads, so writing an unverified value there is
 	# how a unit ends up with a running database it cannot log in to.

@@ -48,6 +48,7 @@ $(PIGEN)/build.sh:
 	@echo "[pi-gen] cloning $(PIGEN_BRANCH)@$$(echo $(PIGEN_REF) | cut -c1-7)"
 	@git clone --branch $(PIGEN_BRANCH) $(PIGEN_REPO) $(PIGEN)
 	@git -C $(PIGEN) checkout --quiet $(PIGEN_REF)
+	@scripts/patch-pigen.sh $(PIGEN)
 
 .PHONY: pi-gen
 pi-gen: $(PIGEN)/build.sh  ## Check out the pinned pi-gen tree
@@ -82,6 +83,7 @@ $(CONFIG): config/pi-gen.config.in versions.env | pi-gen
 # so one build produces one image: ours.
 .PHONY: stage
 stage: pi-gen deb
+	@scripts/patch-pigen.sh $(PIGEN)
 	@rm -rf $(PIGEN)/$(STAGE)
 	@cp -a $(STAGE) $(PIGEN)/$(STAGE)
 	@mkdir -p $(PIGEN)/$(STAGE)/01-nightwatcher/files

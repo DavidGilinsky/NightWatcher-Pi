@@ -151,10 +151,27 @@ check "the release stamp does not claim the requested release" \
 check "the fetch records what it used, on every path" \
 	bash -c "[ \"\$(grep -c '^ *provenance ' scripts/fetch-nightwatcher-deb.sh)\" -eq 3 ]"
 
+# A database with no tables kept the daemon in a restart loop reporting a
+# connection failure, so the unit that creates the database also fills it.
+# shellcheck disable=SC2016
+check "first boot loads the schema into the database it creates" \
+	grep -q 'mariadb nightwatcher < "\${SCHEMA}"' "${STAGE}/03-firstboot/files/nightwatcher-firstboot.sh"
+# The identity is the last 4 bytes of the MAC: 8 hex characters, not 9. Ignore
+# comments, since the one explaining this bug quotes the broken idiom.
+# shellcheck disable=SC2016
+check "the unit identity is the last 8 hex characters" \
+	grep -q 'printf .%s. "\${hex: -8}"' "${STAGE}/02-network/files/nw-common.sh"
+check "no code path still counts bytes for the identity" \
+	bash -c "! grep -vE '^[[:space:]]*#' '${STAGE}/02-network/files/nw-common.sh' | grep -q 'tail -c 9'"
+
 echo "[check] usb"
 check "udev rule and script agree on the label" \
 	bash -c "grep -q 'ID_FS_LABEL}==\"NWDATA\"' '${STAGE}/04-usb/files/99-nightwatcher-usb.rules' &&
 	         grep -q 'USB_LABEL=NWDATA' '${STAGE}/02-network/files/nw-common.sh'"
+# readlink -f reports a path even when the device is absent, so the mirror
+# thought a drive was present on every unit that had none.
+check "drive detection requires the device to exist" \
+	grep -q 'readlink -e' "${STAGE}/04-usb/files/nw-usb.sh"
 check "the mirror always unmounts" \
 	grep -q "trap 'sync; umount" "${STAGE}/04-usb/files/nw-usb.sh"
 

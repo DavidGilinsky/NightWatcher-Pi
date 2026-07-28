@@ -71,18 +71,23 @@ nw_sta_iface() { printf 'wlan0'; }
 # Last 4 bytes of the wlan0 MAC, lowercase hex, no separators: the unit's
 # identity, and the thing that makes every SSID in a network unique.
 nw_mac4() {
-	local mac
+	local mac hex serial
 	mac="$(cat /sys/class/net/wlan0/address 2>/dev/null || true)"
 	if [ -n "${mac}" ]; then
-		printf '%s' "${mac}" | tr -d ':' | tr '[:upper:]' '[:lower:]' | tail -c 9
+		hex="$(printf '%s' "${mac}" | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+		# Exactly 8 characters: 4 bytes. `tail -c 9` looks like the idiom for
+		# this and is not: it counts bytes, and the string has no trailing
+		# newline to absorb one, so it yields 9 hex digits and a unit named
+		# nightwatcher-f67fb3777 instead of nightwatcher-67fb3777.
+		printf '%s' "${hex: -8}"
 		return 0
 	fi
 	# No radio yet (or at all). The Pi's own serial keeps the unit nameable
 	# rather than leaving it as a generic "raspberrypi" on the network.
-	local serial
 	serial="$(sed -n 's/^Serial\s*:\s*0*//p' /proc/cpuinfo | tail -1)"
 	[ -n "${serial}" ] || serial="00000000"
-	printf '%s' "${serial}" | tr '[:upper:]' '[:lower:]' | tail -c 9
+	serial="$(printf '%s' "${serial}" | tr '[:upper:]' '[:lower:]')"
+	printf '%s' "${serial: -8}"
 }
 
 # Whether this unit has an internet path right now, whatever carries it.
