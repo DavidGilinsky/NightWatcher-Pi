@@ -1,0 +1,42 @@
+# ---------------------------------------------------------------------------
+# File:          nightwatcher-site.txt  (on the boot partition)
+# Purpose:       Optional per-unit settings, applied the first time this card
+#                boots. Edit it on any computer that can read the card, before
+#                the unit's first boot. Every line is optional: a unit with
+#                this file untouched provisions itself correctly.
+# License:       GPL-3.0-or-later
+# ---------------------------------------------------------------------------
+#
+# After first boot, change any of this from the web UI's RPi tab instead. On a
+# Compute Module with eMMC, reaching this file again means another rpiboot
+# session, so the web UI is the practical path once a unit is deployed.
+#
+# Lines are KEY=value. Anything after a '#' at the start of a line is ignored.
+
+# Regulatory domain for the radio. Wrong or unset, the access point will not
+# start. Two letters, e.g. US, CA, MX.
+#COUNTRY=US
+
+# Override the access point's name. The default is nightwatcher-<mac4>, derived
+# from this unit's own radio, which keeps every unit in a network distinct.
+# Setting this gives up that guarantee, so name it after the site.
+#AP_SSID=
+
+# Override the access point passphrase. 8 to 63 characters. The fleet default
+# is documented in the deployment guide; change it per unit if your network
+# requires that.
+#AP_PASSPHRASE=
+
+# A human name for this site, shown in the web UI.
+#SITE_NAME=
+
+# Join an existing Wi-Fi network as a client while continuing to serve the
+# access point. This is what lets the unit push DSN exports and sync its clock.
+# Prefer a 2.4 GHz network: one radio serves one channel, and the access point
+# has to follow whatever the client joins.
+#UPLINK_WIFI_SSID=
+#UPLINK_WIFI_PSK=
+
+# Local time zone, e.g. America/Phoenix. Affects export file naming and the
+# times shown in the web UI.
+#TIMEZONE=America/Phoenix

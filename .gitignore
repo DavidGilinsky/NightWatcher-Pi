@@ -40,9 +40,17 @@ pi-gen/deploy/
 # ---- Secrets / local configuration ----
 # Wi-Fi / AP passphrases and any credentials must never be committed.
 *.env
+# ...except the pinned build inputs, which carry no secret: the account password
+# is generated per build into work/pi-gen.config, and every other credential is
+# generated per unit on first boot.
+!versions.env
 secrets/
 *.local
 *.local.conf
+
+# ---- Python bytecode (the agent is linted in place) ----
+__pycache__/
+*.pyc
 
 # ---- OS / editor ----
 *~

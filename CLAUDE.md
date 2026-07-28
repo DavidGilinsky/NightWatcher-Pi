@@ -25,20 +25,28 @@ MariaDB backend) into a turnkey Pi image. It depends on NightWatcher2's **arm64
 `.deb`** (NightWatcher2 already builds arm64 in CI) but ships no application code
 of its own. It is image build tooling plus system configuration.
 
-> **Approach: TBD in this session.** Open design points to settle first:
-> - **Image build tooling:** the official **pi-gen** (Raspberry Pi OS's own image
->   builder, custom stage) vs `rpi-image-gen` / `CustomPiOS` vs a first-boot
->   provisioning script layered on a stock image. pi-gen is closest to "official
->   Raspberry Pi OS + our stage".
-> - **AP stack:** Raspberry Pi OS **Bookworm uses NetworkManager**, which can run
->   an access point via `nmcli` (cleanest on current Pi OS); `hostapd` +
->   `dnsmasq` is the older alternative.
-> - **First-boot unit** that reads the wlan0 MAC, sets the `nightwatcher-<mac4>`
->   SSID, brings up the AP + DHCP, and ensures MariaDB + `nightwatcherd` are
->   running with the web UI reachable on the AP interface.
-> - **Web UI reachability:** AP gateway IP (e.g. `192.168.4.1`) and/or Avahi mDNS
->   (`nightwatcher.local`). NightWatcher2 serves HTTPS with a self-signed cert, so
->   expect a one-time browser warning.
+> **Approach: settled 2026-07-27.** See `docs/architecture.md` for the reasoning
+> and what each decision rejected.
+> - **Image build tooling:** **pi-gen**, `arm64` branch pinned in `versions.env`,
+>   with `stage-nightwatcher` grafted on after stage2 (Pi OS Lite). First-boot
+>   provisioning of packages was ruled out: an access-point-only unit has no
+>   internet at first boot, so everything must be baked in.
+> - **AP stack:** **NetworkManager**, one AP profile with `ipv4.method shared`
+>   (DHCP, DNS, and NAT come with it). A dedicated `ap0` interface keeps the AP up
+>   while `wlan0` is free to join an upstream network; one radio still means one
+>   channel, so the AP follows the client.
+> - **First boot** derives `nightwatcher-<mac4>` from the wlan0 MAC, generates the
+>   per-unit database and SSH passwords, creates the database, applies the AP, and
+>   writes `/boot/firmware/nightwatcher-credentials.txt`.
+> - **Web UI reachability:** `https://nightwatcher.local` (Avahi alias, with a
+>   best-effort 443 to 8080 redirect) and `https://192.168.4.1:8080`. The
+>   self-signed certificate warns once.
+> - **RPi tab:** a root agent on `/run/nightwatcher-platform.sock` exposing a fixed
+>   verb list, proxied by NightWatcher2's `/api/v1/platform/*` for admin sessions.
+>   All Pi-specific code, including the tab's JavaScript, lives here.
+> - **USB data drive:** a nightly `dsn` export target writes to a local spool;
+>   `nw-usb.sh` mirrors that spool onto any `NWDATA`-labelled drive, mounted only
+>   while writing so it is always safe to unplug.
 
 ## Conventions
 

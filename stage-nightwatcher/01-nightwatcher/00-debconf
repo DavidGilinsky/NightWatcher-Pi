@@ -1,0 +1,31 @@
+# ---------------------------------------------------------------------------
+# Author:        David Gilinsky
+# File:          stage-nightwatcher/01-nightwatcher/00-debconf
+# Purpose:       Preseed NightWatcher2's install-time questions so the package
+#                installs unattended into the image. The two deferred answers
+#                matter: no database is created and the daemon is not started
+#                here, because both need the per-unit password that only exists
+#                once the unit has booted for the first time.
+# Created:       2026-07-27
+# Last Modified: 2026-07-27
+# Version:       0.1.0
+# License:       GPL-3.0-or-later
+# ---------------------------------------------------------------------------
+
+# Deliberately blank: a password baked into the image would be the same on every
+# unit ever flashed from it. First boot generates one per unit.
+nightwatcher nightwatcher/db_password password
+nightwatcher nightwatcher/db_host     string  127.0.0.1
+
+# Deferred to first boot, which has the password to create the user with.
+nightwatcher nightwatcher/db_create   boolean false
+
+# Serve the web UI on every interface: the point of the appliance is that a
+# phone joining the access point can reach it. Bound off localhost, the daemon
+# requires a login for reads as well as writes.
+nightwatcher nightwatcher/api_bind    string  0.0.0.0
+nightwatcher nightwatcher/api_port    string  8080
+nightwatcher nightwatcher/api_tls     boolean true
+
+# Started by first boot, once there is a database to talk to.
+nightwatcher nightwatcher/start_now   boolean false

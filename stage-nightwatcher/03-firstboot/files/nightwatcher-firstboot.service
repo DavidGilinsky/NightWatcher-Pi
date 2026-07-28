@@ -1,0 +1,29 @@
+# ---------------------------------------------------------------------------
+# Author:        David Gilinsky
+# File:          /etc/systemd/system/nightwatcher-firstboot.service
+# Purpose:       Provision a freshly flashed unit exactly once. Everything that
+#                must differ between units (identity, database password, SSH
+#                password) is created here rather than baked into the image.
+# Created:       2026-07-27
+# Last Modified: 2026-07-27
+# Version:       0.1.0
+# License:       GPL-3.0-or-later
+# ---------------------------------------------------------------------------
+[Unit]
+Description=NightWatcher appliance first-boot provisioning
+After=network.target NetworkManager.service mariadb.service local-fs.target
+Wants=NetworkManager.service mariadb.service
+Before=nightwatcherd.service
+# The sentinel makes this a no-op on every later boot. A skipped condition still
+# counts as a satisfied dependency, so ordering on this unit stays correct for
+# the life of the appliance.
+ConditionPathExists=!/var/lib/nightwatcher-pi/.provisioned
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/lib/nightwatcher-pi/nightwatcher-firstboot.sh
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

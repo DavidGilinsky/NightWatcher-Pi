@@ -1,0 +1,26 @@
+# ---------------------------------------------------------------------------
+# Author:        David Gilinsky
+# File:          /etc/systemd/system/nightwatcher-mdns-alias.service
+# Purpose:       Publish the fleet-wide name nightwatcher.local alongside each
+#                unit's own nightwatcher-<mac4>.local, so a volunteer types one
+#                address at every site instead of reading a MAC address off a
+#                label. Avahi has no alias record of its own; a published
+#                address record is the standard way to get one.
+# Created:       2026-07-27
+# Last Modified: 2026-07-27
+# Version:       0.1.0
+# License:       GPL-3.0-or-later
+# ---------------------------------------------------------------------------
+[Unit]
+Description=NightWatcher appliance mDNS alias (nightwatcher.local)
+After=avahi-daemon.service nightwatcher-ap.service
+Wants=avahi-daemon.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/lib/nightwatcher-pi/nw-mdns-alias.sh
+Restart=always
+RestartSec=15
+
+[Install]
+WantedBy=multi-user.target

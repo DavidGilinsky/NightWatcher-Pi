@@ -1,0 +1,29 @@
+# ---------------------------------------------------------------------------
+# Author:        David Gilinsky
+# File:          /etc/systemd/system/nightwatcher-radio.service
+# Purpose:       Prepare the radio before NetworkManager claims it: regulatory
+#                domain, rfkill, and the ap0 interface. Ordered Before=
+#                NetworkManager so the AP profile has an interface to bind to
+#                the moment NetworkManager starts.
+# Created:       2026-07-27
+# Last Modified: 2026-07-27
+# Version:       0.1.0
+# License:       GPL-3.0-or-later
+# ---------------------------------------------------------------------------
+[Unit]
+Description=NightWatcher appliance radio preparation (regdomain, ap0)
+DefaultDependencies=no
+After=systemd-udev-settle.service sysinit.target
+Before=NetworkManager.service network-pre.target
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/lib/nightwatcher-pi/nw-radio-setup.sh
+# Never block the boot of a unit nobody can reach: a radio that will not come up
+# is reported, not fatal.
+SuccessExitStatus=0
+
+[Install]
+WantedBy=multi-user.target

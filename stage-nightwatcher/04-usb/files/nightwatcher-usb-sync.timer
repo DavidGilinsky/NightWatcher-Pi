@@ -1,0 +1,23 @@
+# ---------------------------------------------------------------------------
+# Author:        David Gilinsky
+# File:          /etc/systemd/system/nightwatcher-usb-sync.timer
+# Purpose:       Keep a drive that stays plugged in current, so a volunteer who
+#                leaves one in the enclosure between visits finds last night's
+#                readings on it rather than the ones from their last trip.
+#                Cheap when no drive is present: the mirror exits immediately.
+# Created:       2026-07-27
+# Last Modified: 2026-07-27
+# Version:       0.1.0
+# License:       GPL-3.0-or-later
+# ---------------------------------------------------------------------------
+[Unit]
+Description=Hourly NightWatcher USB data mirror
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=1h
+# A unit whose clock was wrong at boot still catches up.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

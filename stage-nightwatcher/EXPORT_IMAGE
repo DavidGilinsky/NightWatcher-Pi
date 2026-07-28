@@ -1,0 +1,17 @@
+# ---------------------------------------------------------------------------
+# Author:        David Gilinsky
+# File:          stage-nightwatcher/EXPORT_IMAGE
+# Purpose:       Tell pi-gen to export a flashable image after this stage. This
+#                is the only stage that exports one (the Makefile drops
+#                SKIP_IMAGES into stage2), so a build produces exactly one
+#                image: the appliance.
+# Created:       2026-07-27
+# Last Modified: 2026-07-27
+# Version:       0.1.0
+# License:       GPL-3.0-or-later
+# ---------------------------------------------------------------------------
+IMG_SUFFIX=""
+
+if [ "${USE_QEMU}" = "1" ]; then
+	export IMG_SUFFIX="${IMG_SUFFIX}-qemu"
+fi

@@ -1,0 +1,36 @@
+# ---------------------------------------------------------------------------
+# Author:        David Gilinsky
+# File:          /etc/systemd/system/nightwatcher-pi-agent.service
+# Purpose:       Run the privileged host agent that backs the web UI's RPi tab.
+#                Its socket existing is what makes the tab appear at all, so a
+#                NightWatcher install that is not this appliance never shows one.
+# Created:       2026-07-27
+# Last Modified: 2026-07-27
+# Version:       0.1.0
+# License:       GPL-3.0-or-later
+# ---------------------------------------------------------------------------
+[Unit]
+Description=NightWatcher appliance platform agent
+After=network.target NetworkManager.service
+Wants=NetworkManager.service
+# Raspberry Pi hardware only. The tab is meant to be there when the host is a
+# Pi and absent otherwise, and this is the check that decides it.
+ConditionPathExists=/proc/device-tree/model
+
+[Service]
+Type=simple
+ExecStart=/usr/local/lib/nightwatcher-pi/nightwatcher-pi-agent
+Restart=always
+RestartSec=5
+
+# Runs as root because reconfiguring Wi-Fi, formatting a drive, and setting the
+# clock all require it. The security boundary is the verb list in the agent,
+# not the user it runs as: it accepts a fixed set of JSON requests on a socket
+# only the daemon's group can open, and never passes a caller's string to a
+# shell.
+NoNewPrivileges=yes
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

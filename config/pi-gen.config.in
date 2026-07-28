@@ -1,0 +1,51 @@
+# ---------------------------------------------------------------------------
+# Author:        David Gilinsky
+# File:          config/pi-gen.config.in
+# Purpose:       Template for the pi-gen config the Makefile generates into
+#                work/. @TOKENS@ are substituted from versions.env; the result
+#                is what pi-gen sources. Never edit the generated copy: edit
+#                this template or versions.env.
+# Created:       2026-07-27
+# Last Modified: 2026-07-27
+# Version:       0.1.0
+# License:       GPL-3.0-or-later
+# ---------------------------------------------------------------------------
+
+IMG_NAME='@IMG_NAME@'
+RELEASE='@RELEASE@'
+
+# stage0-2 are Raspberry Pi OS Lite. stage-nightwatcher is ours, and it is the
+# only stage that exports an image (the Makefile drops SKIP_IMAGES into stage2).
+STAGE_LIST='stage0 stage1 stage2 stage-nightwatcher'
+
+# Headless appliance: no desktop, no first-boot wizard, no console to answer it.
+TARGET_HOSTNAME='@IMG_NAME@'
+FIRST_USER_NAME='@FIRST_USER_NAME@'
+FIRST_USER_PASS='@FIRST_USER_PASS@'
+DISABLE_FIRST_BOOT_USER_RENAME=1
+ENABLE_SSH=@ENABLE_SSH@
+
+LOCALE_DEFAULT='@LOCALE_DEFAULT@'
+KEYBOARD_KEYMAP='@KEYBOARD_KEYMAP@'
+KEYBOARD_LAYOUT='English (US)'
+TIMEZONE_DEFAULT='@TIMEZONE_DEFAULT@'
+
+# The regulatory domain the radio comes up in. Set here as well as at runtime:
+# an AP will not start in an unset domain.
+WPA_COUNTRY='@WIFI_COUNTRY@'
+
+# Ship the .img.xz rather than a zip: it is what rpi-imager and rpiboot want.
+DEPLOY_COMPRESSION=xz
+COMPRESSION_LEVEL=6
+
+# ---- appliance settings ----
+# Exported, not just set: pi-gen sources this file and our stage scripts read
+# these out of the environment. This is also how the values reach the build
+# running inside Docker, which sees the config file and nothing else of ours.
+export NWPI_VERSION='@NWPI_VERSION@'
+export NW2_VERSION='@NW2_VERSION@'
+export AP_SSID_PREFIX='@AP_SSID_PREFIX@'
+export AP_PASSPHRASE='@AP_PASSPHRASE@'
+export AP_ADDRESS='@AP_ADDRESS@'
+export AP_CHANNEL='@AP_CHANNEL@'
+export WIFI_COUNTRY='@WIFI_COUNTRY@'

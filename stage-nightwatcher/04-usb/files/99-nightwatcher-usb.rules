@@ -1,0 +1,15 @@
+# ---------------------------------------------------------------------------
+# Author:        David Gilinsky
+# File:          /etc/udev/rules.d/99-nightwatcher-usb.rules
+# Purpose:       Mirror the export spool the moment a volunteer plugs in a
+#                prepared drive, so collecting data is "insert, wait a few
+#                seconds, remove" with nothing to click.
+#
+#                Any drive labelled NWDATA qualifies, which is what makes the
+#                swap work: a volunteer can carry several and rotate them.
+# Created:       2026-07-27
+# Last Modified: 2026-07-27
+# Version:       0.1.0
+# License:       GPL-3.0-or-later
+# ---------------------------------------------------------------------------
+ACTION=="add", SUBSYSTEM=="block", ENV{ID_FS_LABEL}=="NWDATA", TAG+="systemd", ENV{SYSTEMD_WANTS}="nightwatcher-usb-sync.service"

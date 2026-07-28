@@ -1,0 +1,30 @@
+# ---------------------------------------------------------------------------
+# Author:        David Gilinsky
+# File:          /etc/systemd/system/nightwatcher-ap.service
+# Purpose:       Bring up (and keep correct) the access point profile on every
+#                boot, after first boot has decided what this unit is called.
+#                The agent restarts this unit when an operator changes the SSID
+#                or passphrase from the web UI.
+# Created:       2026-07-27
+# Last Modified: 2026-07-27
+# Version:       0.1.0
+# License:       GPL-3.0-or-later
+# ---------------------------------------------------------------------------
+[Unit]
+Description=NightWatcher appliance access point
+Requires=nightwatcher-radio.service
+After=nightwatcher-radio.service NetworkManager.service nightwatcher-firstboot.service
+Wants=NetworkManager.service
+StartLimitIntervalSec=180
+StartLimitBurst=5
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/lib/nightwatcher-pi/nw-ap.sh apply
+# NetworkManager may still be settling the interface on a cold boot.
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

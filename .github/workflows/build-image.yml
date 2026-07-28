@@ -1,0 +1,102 @@
+# ---------------------------------------------------------------------------
+# Author:        David Gilinsky
+# File:          .github/workflows/build-image.yml
+# Purpose:       Check the stage on every push, and build the flashable image on
+#                demand or on a tag. The image builds natively on an arm64
+#                runner, which is both faster and closer to the target than
+#                emulating a Pi on x86.
+# Created:       2026-07-27
+# Last Modified: 2026-07-27
+# Version:       0.1.0
+# License:       GPL-3.0-or-later
+# ---------------------------------------------------------------------------
+name: Image
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      nw2_version:
+        description: 'NightWatcher2 release tag to bake in (blank = versions.env)'
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  # Fast, and catches the failures that would otherwise surface forty minutes
+  # into an image build or, worse, on a unit in a field.
+  check:
+    name: Lint and check the stage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install checkers
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - run: make lint
+      - run: make check
+
+  image:
+    name: Build the appliance image
+    needs: check
+    # Only when asked for, or when tagging a release: this job takes tens of
+    # minutes and most of the runner's disk.
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      # pi-gen builds a full Raspberry Pi OS rootfs and then an image of it. A
+      # stock runner has enough room only after the preinstalled toolchains go.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost "${AGENT_TOOLSDIRECTORY}" || true
+          df -h /
+
+      - name: Install pi-gen's dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y coreutils quilt parted qemu-user-static debootstrap \
+            zerofree zip dosfstools libarchive-tools libcap2-bin grep rsync xz-utils file \
+            git curl bc gpg pigz xxd arch-test
+
+      - name: Bake the requested NightWatcher2 release
+        if: inputs.nw2_version != ''
+        run: sed -i "s|^NW2_VERSION=.*|NW2_VERSION=${{ inputs.nw2_version }}|" versions.env
+
+      - name: Build
+        env:
+          # Cross-repo read of the NightWatcher2 release assets.
+          GH_TOKEN: ${{ secrets.NW2_READ_TOKEN || github.token }}
+        run: make image-native
+
+      - name: Report what was built
+        run: |
+          ls -lh deploy/
+          cat deploy/*.info 2>/dev/null || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nightwatcher-pi-image
+          path: |
+            deploy/*.img.xz
+            deploy/*.img.xz.sha256
+            deploy/*.info
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "NightWatcher-Pi ${GITHUB_REF_NAME}" \
+            --generate-notes \
+            deploy/*.img.xz deploy/*.img.xz.sha256 || \
+          gh release upload "${GITHUB_REF_NAME}" deploy/*.img.xz deploy/*.img.xz.sha256 --clobber

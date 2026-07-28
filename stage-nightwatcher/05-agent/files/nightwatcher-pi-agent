@@ -1,0 +1,431 @@
+#!/usr/bin/env python3
+# ---------------------------------------------------------------------------
+# Author:        David Gilinsky
+# File:          /usr/local/lib/nightwatcher-pi/nightwatcher-pi-agent
+# Purpose:       The privileged half of the appliance's RPi tab. NightWatcher2
+#                runs as a DynamicUser under ProtectSystem=strict and cannot
+#                configure Wi-Fi, format a drive, or set the clock; this agent
+#                can, and exposes exactly those operations as a fixed verb list
+#                over a unix socket that only the daemon's group can open.
+#
+#                It also serves the tab's own JavaScript, so nothing about a
+#                Raspberry Pi lives in NightWatcher2: the daemon proxies
+#                /api/v1/platform/* here, and a machine without this agent has
+#                no such tab.
+# Created:       2026-07-27
+# Last Modified: 2026-07-27
+# Version:       0.1.0
+# License:       GPL-3.0-or-later
+# ---------------------------------------------------------------------------
+"""Host-configuration agent for the NightWatcher-Pi appliance."""
+
+import grp
+import http.server
+import json
+import os
+import re
+import socket
+import socketserver
+import subprocess
+import sys
+import threading
+
+VERSION = "0.1.0"
+SOCKET_PATH = os.environ.get("NW_PLATFORM_SOCKET", "/run/nightwatcher-platform.sock")
+SOCKET_GROUP = "nightwatcher-pi"
+# Overridable so the agent can be exercised from a checkout, off a Pi.
+LIB = os.environ.get("NW_PI_LIB", "/usr/local/lib/nightwatcher-pi")
+UI_FILE = os.path.join(LIB, "ui.js")
+MAX_BODY = 64 * 1024
+
+AP = os.path.join(LIB, "nw-ap.sh")
+UPLINK = os.path.join(LIB, "nw-uplink.sh")
+USB = os.path.join(LIB, "nw-usb.sh")
+
+# nmcli and mkfs are not reentrant in any useful sense, and two operators in two
+# browser tabs are entirely possible. One at a time.
+_lock = threading.Lock()
+
+
+def log(message):
+    """Write to stderr, which under systemd is the journal."""
+    print(message, file=sys.stderr, flush=True)
+
+
+def run(argv, timeout=60):
+    """Run a command with no shell involved. Returns (rc, stdout, stderr)."""
+    try:
+        p = subprocess.run(
+            argv, capture_output=True, text=True, timeout=timeout, check=False
+        )
+        return p.returncode, p.stdout.strip(), p.stderr.strip()
+    except subprocess.TimeoutExpired:
+        return 124, "", "timed out after %ds" % timeout
+    except OSError as exc:
+        return 127, "", str(exc)
+
+
+def kv(text):
+    """Parse the key=value output the helper scripts report status in."""
+    out = {}
+    for line in text.splitlines():
+        if "=" in line:
+            k, _, v = line.partition("=")
+            out[k.strip()] = v.strip()
+    return out
+
+
+def read_conf():
+    """The unit's effective settings, as first boot and the UI have left them."""
+    conf = {}
+    for path in ("/etc/nightwatcher-pi/appliance.defaults",
+                 "/etc/nightwatcher-pi/appliance.conf"):
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    k, _, v = line.partition("=")
+                    conf[k.strip()] = v.strip().strip("'\"")
+        except OSError:
+            pass
+    return conf
+
+
+# ---- validation -----------------------------------------------------------
+# Everything below is reachable by an authenticated admin over the network, so
+# it is checked here rather than trusted from the browser.
+
+SSID_RE = re.compile(r"^[\x20-\x7e]{1,32}$")
+DEV_RE = re.compile(r"^/dev/[a-zA-Z0-9]+$")
+
+
+def want_ssid(value):
+    if not isinstance(value, str) or not SSID_RE.match(value):
+        raise ValueError("an SSID is 1 to 32 printable characters")
+    return value
+
+
+def want_psk(value, allow_empty=False):
+    if value in (None, "") and allow_empty:
+        return ""
+    if not isinstance(value, str) or not 8 <= len(value) <= 63:
+        raise ValueError("a passphrase is 8 to 63 characters")
+    return value
+
+
+def want_device(value):
+    if not isinstance(value, str) or not DEV_RE.match(value):
+        raise ValueError("a device looks like /dev/sda")
+    return value
+
+
+# ---- the verbs ------------------------------------------------------------
+
+
+def verb_index():
+    return {
+        "name": "nightwatcher-pi",
+        "label": "RPi",
+        "version": VERSION,
+        "ui": "ui.js",
+    }
+
+
+def verb_status():
+    conf = read_conf()
+    _, ap_out, _ = run([AP, "status"], timeout=20)
+    _, up_out, _ = run([UPLINK, "status"], timeout=20)
+    _, usb_out, _ = run([USB, "status"], timeout=20)
+
+    rc, model, _ = run(["cat", "/proc/device-tree/model"], timeout=5)
+    model = model.replace("\x00", "").strip() if rc == 0 else ""
+
+    _, ntp, _ = run(["timedatectl", "show", "--property=NTPSynchronized",
+                     "--value"], timeout=10)
+    _, tz, _ = run(["timedatectl", "show", "--property=Timezone", "--value"],
+                   timeout=10)
+    _, now, _ = run(["date", "-u", "+%Y-%m-%d %H:%M:%S UTC"], timeout=5)
+
+    return {
+        "unit": socket.gethostname(),
+        "site": conf.get("SITE_NAME", ""),
+        "model": model,
+        "image_version": conf.get("NWPI_VERSION", VERSION),
+        "spool_dir": "/var/lib/nightwatcher-pi/spool/dsn",
+        "ap": kv(ap_out),
+        "uplink": kv(up_out),
+        "usb": kv(usb_out),
+        "time": {
+            "utc": now,
+            "timezone": tz,
+            "ntp_synchronized": ntp == "yes",
+        },
+    }
+
+
+def verb_wifi_scan():
+    rc, out, err = run([UPLINK, "scan"], timeout=45)
+    if rc != 0:
+        raise RuntimeError(err or "the scan failed")
+    networks = []
+    for line in out.splitlines():
+        # nmcli -t escapes colons inside fields as '\:', so split on the
+        # unescaped ones only.
+        parts = re.split(r"(?<!\\):", line)
+        if len(parts) < 4:
+            continue
+        ssid = parts[0].replace("\\:", ":")
+        try:
+            freq = int(parts[3].split()[0])
+        except (ValueError, IndexError):
+            freq = 0
+        networks.append({
+            "ssid": ssid,
+            "signal": int(parts[1]) if parts[1].isdigit() else 0,
+            "security": parts[2],
+            "band": "5 GHz" if freq >= 4900 else "2.4 GHz",
+        })
+    # One SSID can appear once per access point; keep the strongest of each.
+    best = {}
+    for n in networks:
+        if n["ssid"] not in best or n["signal"] > best[n["ssid"]]["signal"]:
+            best[n["ssid"]] = n
+    return {"networks": sorted(best.values(), key=lambda n: -n["signal"])}
+
+
+def verb_wifi_join(body):
+    ssid = want_ssid(body.get("ssid"))
+    psk = want_psk(body.get("psk"), allow_empty=True)
+    rc, _, err = run([UPLINK, "join", ssid, psk], timeout=90)
+    if rc != 0:
+        raise RuntimeError(err or "could not join %s" % ssid)
+    return {"joined": ssid, "note": "access-point clients reconnect once the radio has retuned"}
+
+
+def verb_wifi_forget():
+    rc, _, err = run([UPLINK, "forget"], timeout=60)
+    if rc != 0:
+        raise RuntimeError(err or "could not forget the uplink")
+    return {"forgotten": True}
+
+
+def verb_ap(body):
+    changed = {}
+    if "ssid" in body and body["ssid"]:
+        ssid = want_ssid(body["ssid"])
+        rc, _, err = run([AP, "set-ssid", ssid], timeout=60)
+        if rc != 0:
+            raise RuntimeError(err or "could not change the SSID")
+        changed["ssid"] = ssid
+    if "passphrase" in body and body["passphrase"]:
+        psk = want_psk(body["passphrase"])
+        rc, _, err = run([AP, "set-psk", psk], timeout=60)
+        if rc != 0:
+            raise RuntimeError(err or "could not change the passphrase")
+        changed["passphrase"] = "(changed)"
+    if not changed:
+        raise ValueError("nothing to change")
+    return {"changed": changed,
+            "note": "every device joined to this access point must rejoin with the new details"}
+
+
+def verb_usb_devices():
+    """Candidate drives for prepare: USB-attached whole disks, nothing else."""
+    rc, out, _ = run(["lsblk", "-dnpo", "NAME,SIZE,TRAN,MODEL,LABEL"], timeout=20)
+    disks = []
+    if rc == 0:
+        for line in out.splitlines():
+            parts = line.split(None, 3)
+            if len(parts) < 3 or parts[2] != "usb":
+                continue
+            disks.append({
+                "device": parts[0],
+                "size": parts[1],
+                "model": parts[3].strip() if len(parts) > 3 else "",
+                "confirm": os.path.basename(parts[0]),
+            })
+    return {"devices": disks}
+
+
+def verb_usb_sync():
+    rc, _, err = run(["systemctl", "start", "nightwatcher-usb-sync.service"],
+                     timeout=120)
+    if rc != 0:
+        raise RuntimeError(err or "the mirror could not be started")
+    return verb_status()["usb"]
+
+
+def verb_usb_prepare(body):
+    device = want_device(body.get("device"))
+    confirm = body.get("confirm")
+    if confirm != os.path.basename(device):
+        raise ValueError("confirmation does not match the device")
+    rc, _, err = run([USB, "prepare", device, confirm], timeout=300)
+    if rc != 0:
+        raise RuntimeError(err or "could not prepare %s" % device)
+    return {"prepared": device}
+
+
+def verb_time(body):
+    """Set the clock from the browser, for units that never see an NTP server."""
+    epoch = body.get("epoch")
+    if not isinstance(epoch, (int, float)):
+        raise ValueError("epoch must be a number of seconds")
+    # 2020-01-01 to 2100-01-01: a browser this far off is a browser to ignore.
+    if not 1577836800 <= epoch <= 4102444800:
+        raise ValueError("that timestamp is not plausible")
+    run(["timedatectl", "set-ntp", "false"], timeout=15)
+    rc, _, err = run(["date", "-u", "-s", "@%d" % int(epoch)], timeout=15)
+    if rc != 0:
+        raise RuntimeError(err or "could not set the clock")
+    run(["hwclock", "--systohc"], timeout=15)
+    run(["fake-hwclock", "save"], timeout=15)
+    return {"utc": run(["date", "-u"], timeout=5)[1]}
+
+
+GET_VERBS = {
+    "/": lambda: verb_index(),
+    "/status": verb_status,
+    "/wifi/scan": verb_wifi_scan,
+    "/usb/devices": verb_usb_devices,
+}
+
+POST_VERBS = {
+    "/wifi/join": verb_wifi_join,
+    "/wifi/forget": lambda body: verb_wifi_forget(),
+    "/ap": verb_ap,
+    "/usb/sync": lambda body: verb_usb_sync(),
+    "/usb/prepare": verb_usb_prepare,
+    "/time": verb_time,
+}
+
+
+# ---- transport ------------------------------------------------------------
+
+
+class Handler(http.server.BaseHTTPRequestHandler):
+    server_version = "nightwatcher-pi-agent/" + VERSION
+    protocol_version = "HTTP/1.1"
+
+    # AF_UNIX peers have no address; the defaults index into it and raise.
+    def address_string(self):
+        return "local"
+
+    def log_message(self, fmt, *args):
+        log("agent: " + (fmt % args))
+
+    def _send(self, status, payload, ctype="application/json"):
+        body = payload if isinstance(payload, bytes) else json.dumps(payload).encode()
+        self.send_response(status)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _fail(self, status, message):
+        self._send(status, {"error": message})
+
+    def _path(self):
+        return self.path.split("?", 1)[0].rstrip("/") or "/"
+
+    def do_GET(self):  # noqa: N802  (http.server's naming)
+        path = self._path()
+        if path == "/ui.js":
+            try:
+                with open(UI_FILE, "rb") as fh:
+                    self._send(200, fh.read(), "application/javascript")
+            except OSError as exc:
+                self._fail(500, "cannot read the tab's script: %s" % exc)
+            return
+        verb = GET_VERBS.get(path)
+        if verb is None:
+            self._fail(404, "no such platform endpoint")
+            return
+        try:
+            with _lock:
+                self._send(200, verb())
+        except ValueError as exc:
+            self._fail(400, str(exc))
+        except Exception as exc:  # noqa: BLE001  (the reply is the error report)
+            log("agent: GET %s failed: %s" % (path, exc))
+            self._fail(500, str(exc))
+
+    def do_POST(self):  # noqa: N802
+        path = self._path()
+        verb = POST_VERBS.get(path)
+        if verb is None:
+            self._fail(404, "no such platform endpoint")
+            return
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            self._fail(400, "bad Content-Length")
+            return
+        if length > MAX_BODY:
+            self._fail(413, "request too large")
+            return
+        raw = self.rfile.read(length) if length else b"{}"
+        try:
+            body = json.loads(raw or b"{}")
+            if not isinstance(body, dict):
+                raise ValueError("expected a JSON object")
+        except (ValueError, UnicodeDecodeError) as exc:
+            self._fail(400, "invalid JSON: %s" % exc)
+            return
+        try:
+            with _lock:
+                self._send(200, verb(body))
+        except ValueError as exc:
+            self._fail(400, str(exc))
+        except Exception as exc:  # noqa: BLE001
+            log("agent: POST %s failed: %s" % (path, exc))
+            self._fail(500, str(exc))
+
+
+class UnixHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
+    address_family = socket.AF_UNIX
+    daemon_threads = True
+    allow_reuse_address = False
+
+    def server_bind(self):
+        # HTTPServer.server_bind resolves the bind address as a host name,
+        # which a filesystem path is not. TCPServer's does the actual bind.
+        socketserver.TCPServer.server_bind(self)
+        self.server_name = "nightwatcher-platform"
+        self.server_port = 0
+
+
+def main():
+    if os.path.exists(SOCKET_PATH):
+        os.unlink(SOCKET_PATH)
+
+    # 0660 root:nightwatcher-pi. The daemon is in that group (by drop-in) and
+    # nothing else on the appliance is, so the verb list is reachable by the
+    # web UI and by root, and by nobody else.
+    old_umask = os.umask(0o117)
+    try:
+        server = UnixHTTPServer(SOCKET_PATH, Handler)
+    finally:
+        os.umask(old_umask)
+
+    try:
+        os.chown(SOCKET_PATH, 0, grp.getgrnam(SOCKET_GROUP).gr_gid)
+    except (KeyError, OSError) as exc:
+        log("agent: could not give %s to group %s: %s"
+            % (SOCKET_PATH, SOCKET_GROUP, exc))
+
+    log("agent: listening on %s" % SOCKET_PATH)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
+        if os.path.exists(SOCKET_PATH):
+            os.unlink(SOCKET_PATH)
+
+
+if __name__ == "__main__":
+    main()

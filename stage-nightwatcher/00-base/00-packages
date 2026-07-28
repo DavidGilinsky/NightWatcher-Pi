@@ -1,0 +1,49 @@
+# ---------------------------------------------------------------------------
+# Author:        David Gilinsky
+# File:          stage-nightwatcher/00-base/00-packages
+# Purpose:       Everything the appliance needs present in the image. Nothing
+#                may be installed on first boot: the unit comes up as its own
+#                access point with no route to the internet, so anything
+#                missing here is missing forever.
+# Created:       2026-07-27
+# Last Modified: 2026-07-27
+# Version:       0.1.0
+# License:       GPL-3.0-or-later
+# ---------------------------------------------------------------------------
+
+# The database NightWatcher2 stores readings in.
+mariadb-server
+mariadb-client
+
+# Access point: NetworkManager runs it, and its "shared" IPv4 mode supplies
+# DHCP and DNS to joined clients (and NAT, if an uplink ever appears) using
+# dnsmasq-base. iw creates the second radio interface; the regulatory database
+# and rfkill decide whether the radio may transmit at all.
+network-manager
+dnsmasq-base
+iw
+rfkill
+wireless-regdb
+# The 443 -> 8080 redirect, so the printed address needs no port number.
+nftables
+
+# Reachable as nightwatcher.local without a router to ask. avahi-utils supplies
+# avahi-publish, which holds the fleet-wide nightwatcher.local alias.
+avahi-daemon
+avahi-utils
+libnss-mdns
+
+# Volunteer data drives: exFAT so the same drive mounts on Windows, macOS, and
+# Linux; rsync to mirror the spool onto it.
+exfatprogs
+dosfstools
+rsync
+
+# The privileged host agent behind the web UI's RPi tab.
+python3
+python3-minimal
+
+# Clock: timesyncd whenever an uplink exists, fake-hwclock so a unit that has
+# been offline for a month never comes back with a 1970 timestamp.
+systemd-timesyncd
+fake-hwclock

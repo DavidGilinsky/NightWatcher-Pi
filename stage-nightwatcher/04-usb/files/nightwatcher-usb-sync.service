@@ -1,0 +1,22 @@
+# ---------------------------------------------------------------------------
+# Author:        David Gilinsky
+# File:          /etc/systemd/system/nightwatcher-usb-sync.service
+# Purpose:       Mirror the export spool onto a prepared USB drive. Started by
+#                udev when such a drive appears, by a timer while one stays
+#                plugged in, and by the web UI's RPi tab on demand.
+# Created:       2026-07-27
+# Last Modified: 2026-07-27
+# Version:       0.1.0
+# License:       GPL-3.0-or-later
+# ---------------------------------------------------------------------------
+[Unit]
+Description=NightWatcher appliance USB data mirror
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/nightwatcher-pi/nw-usb.sh sync
+# A drive that is full, unformatted, or yanked mid-write is an ordinary event
+# out in a field, not a reason to leave a failed unit in the status list.
+SuccessExitStatus=0 1
+TimeoutStartSec=600
