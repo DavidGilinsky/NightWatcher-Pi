@@ -109,6 +109,12 @@ check "the database password is generated, not baked" \
 # partition a Compute Module cannot show you without rpiboot.
 check "first boot does not rotate the login password" \
 	bash -c "! grep -q 'chpasswd' '${STAGE}/03-firstboot/files/nightwatcher-firstboot.sh'"
+# nightwatcher-ap and nightwatcherd are both ordered After=firstboot, so a
+# blocking restart from inside first boot waits for a job systemd will not run
+# until first boot exits. The unit then dies at TimeoutStartSec having brought
+# up no access point, which is a unit nobody can reach.
+check "first boot never blocks on a unit ordered after it" \
+	bash -c "! grep -E '^[[:space:]]*systemctl restart ' '${STAGE}/03-firstboot/files/nightwatcher-firstboot.sh' | grep -qv -- '--no-block'"
 check "the login password is pinned, not generated" \
 	grep -qE '^FIRST_USER_PASS=.+' versions.env
 check "the database password is still per unit" \

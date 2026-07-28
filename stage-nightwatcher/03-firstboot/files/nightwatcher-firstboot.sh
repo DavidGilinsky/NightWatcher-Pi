@@ -140,8 +140,17 @@ fi
 install -d -o root -g nightwatcher-pi -m 2775 "${NWPI_SPOOL}" "${NWPI_SPOOL}/dsn"
 
 # ---- 6. bring the appliance up -------------------------------------------
-systemctl restart nightwatcher-ap.service 2>/dev/null ||
-	nw_warn "the access point did not start; check 'journalctl -u nightwatcher-ap'"
+# --no-block is not optional here. Both units below are ordered
+# After=nightwatcher-firstboot.service, so a blocking `systemctl restart` from
+# inside this script waits for a job that systemd will not run until this script
+# exits. That deadlock ends at TimeoutStartSec, with the unit killed, no access
+# point, and no credentials file: a unit that boots to nothing reachable.
+#
+# Queuing the job is enough. systemd runs it the moment provisioning finishes,
+# and on a manual `nightwatcher-provision --force` run there is no job to wait
+# on at all.
+systemctl restart --no-block nightwatcher-ap.service 2>/dev/null ||
+	nw_warn "could not queue the access point start; check 'journalctl -u nightwatcher-ap'"
 
 # An uplink named in the boot file, where the radio can do both roles at once.
 if [ -n "${UPLINK_SSID:-}" ]; then
@@ -150,8 +159,8 @@ if [ -n "${UPLINK_SSID:-}" ]; then
 fi
 
 systemctl reset-failed nightwatcherd.service 2>/dev/null || true
-systemctl restart nightwatcherd.service 2>/dev/null ||
-	nw_warn "nightwatcherd did not start; check 'journalctl -u nightwatcherd'"
+systemctl restart --no-block nightwatcherd.service 2>/dev/null ||
+	nw_warn "could not queue the daemon start; check 'journalctl -u nightwatcherd'"
 
 # ---- 7. tell somebody ------------------------------------------------------
 # The boot partition is FAT and readable from any laptop, which makes it the
