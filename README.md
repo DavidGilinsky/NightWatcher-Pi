@@ -29,10 +29,22 @@ collected either over the internet or on a USB drive carried home.
 
 ## Building an image
 
-Needs Docker, `git`, `make`, and the `gh` CLI. Everything else is pinned in
-[versions.env](versions.env).
+Needs Docker, `git`, `make`, `openssl`, and the `gh` CLI. Everything else is
+pinned in [versions.env](versions.env).
+
+On an **x86_64** host, pi-gen also needs arm64 emulation. `qemu-user-static`
+alone is not enough: pi-gen looks for the dynamically linked `qemu-aarch64` and
+registers that one for binfmt.
 
 ```sh
+sudo apt install qemu-user-binfmt qemu-user-static binfmt-support
+```
+
+An **arm64** host (including CI on `ubuntu-24.04-arm`, which is how release
+images are built) needs none of that.
+
+```sh
+make preflight                                       # is this host able to build at all?
 make image                                           # the usual way: pi-gen in Docker
 make image NW2_DEB=./nightwatcher_0.1.0_arm64.deb    # test an unreleased package
 make check                                           # lint and structural checks, no build

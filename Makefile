@@ -90,14 +90,19 @@ stage: pi-gen deb
 
 # ---- image ----------------------------------------------------------------
 
+.PHONY: preflight
+preflight:  ## Check this host can build an image at all
+	@scripts/preflight.sh docker
+
 .PHONY: image
-image: stage $(CONFIG)  ## Build the image in Docker (the usual way)
+image: preflight stage $(CONFIG)  ## Build the image in Docker (the usual way)
 	@echo "[image] building; this takes a while and needs disk"
 	cd $(PIGEN) && ./build-docker.sh -c $(CONFIG)
 	@$(MAKE) --no-print-directory collect
 
 .PHONY: image-native
 image-native: stage $(CONFIG)  ## Build the image directly (arm64 host, needs root)
+	@scripts/preflight.sh native
 	cd $(PIGEN) && sudo -E ./build.sh -c $(CONFIG)
 	@$(MAKE) --no-print-directory collect
 
