@@ -154,6 +154,15 @@ check "the daemon may bind it" \
 	grep -q 'AmbientCapabilities=CAP_NET_BIND_SERVICE' "${STAGE}/01-nightwatcher/files/pi-appliance.conf"
 check "port 80 redirects rather than being NATted to a TLS listener" \
 	test -f "${STAGE}/02-network/files/nightwatcher-redirect.socket"
+# An absent listener can mean an unbindable port or a daemon that keeps dying;
+# only the first is the check's business.
+check "the port check tells a crash loop from an unbindable port" \
+	grep -q 'ActiveState' "${STAGE}/02-network/files/nw-webcheck.sh"
+# shellcheck disable=SC2016
+check "first boot reports why a schema load failed" \
+	grep -q 'could not load ${SCHEMA}:' "${STAGE}/03-firstboot/files/nightwatcher-firstboot.sh"
+check "first boot pins the database collation" \
+	grep -q 'ALTER DATABASE' "${STAGE}/03-firstboot/files/nightwatcher-firstboot.sh"
 check "a boot-time check can recover an unbindable port" \
 	grep -q 'FALLBACK_PORT=8080' "${STAGE}/02-network/files/nw-webcheck.sh"
 check "no user-facing URL still carries a port suffix" \

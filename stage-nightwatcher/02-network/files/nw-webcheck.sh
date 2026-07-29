@@ -54,6 +54,22 @@ done
 
 nw_warn "nothing is listening on port ${PORT} two minutes after the daemon started"
 
+# Before blaming the port, ask whether the daemon is even staying up. One that
+# exits seconds after binding holds its listener too briefly to be seen, so an
+# absent listener says nothing about whether the port could be bound. Demoting
+# 443 on that evidence hides the real fault and makes the URL worse for nothing,
+# which is exactly what happened the first time this ran on hardware: the daemon
+# was restarting over a database it could not read, having bound 443 perfectly.
+state="$(systemctl show nightwatcherd.service -p ActiveState --value 2>/dev/null)"
+restarts="$(systemctl show nightwatcherd.service -p NRestarts --value 2>/dev/null)"
+if [ "${state}" != "active" ]; then
+	nw_warn "nightwatcherd is ${state:-unknown} after ${restarts:-0} restart(s): the daemon is failing, not the port"
+	nw_warn "leaving the port alone; the last thing it said was:"
+	journalctl -u nightwatcherd.service -n 3 --no-pager -o cat 2>/dev/null |
+		while IFS= read -r line; do nw_warn "  ${line}"; done
+	exit 0
+fi
+
 if [ "${PORT}" = "${FALLBACK_PORT}" ]; then
 	nw_warn "already on the fallback port; see 'journalctl -u nightwatcherd'"
 	exit 0

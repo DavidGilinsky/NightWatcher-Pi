@@ -148,16 +148,35 @@ SQL
 	# its own setup: the unit that owns the database creates the schema in it.
 	# schema.sql is written with CREATE TABLE IF NOT EXISTS, so this is
 	# idempotent and safe on every re-provision.
+	# Pin the database's collation before loading anything into it. The schema
+	# does not depend on this any more, but an appliance may be re-provisioned
+	# onto a database some earlier version created under a different server
+	# default, and a database holding tables in two collations cannot form the
+	# foreign keys between them.
+	mariadb -e "ALTER DATABASE \`nightwatcher\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" \
+		>/dev/null 2>&1 || nw_warn "could not pin the database collation"
+
+	# Load the tables here rather than leaving the daemon to bootstrap itself.
+	# A database with no tables at all was enough to keep nightwatcherd in a
+	# restart loop, reporting a connection failure while its credentials were
+	# perfectly good. schema.sql is written with CREATE TABLE IF NOT EXISTS, so
+	# this is idempotent and safe on every re-provision.
 	SCHEMA="$(sed -n 's/^[[:space:]]*schema_file[[:space:]]*=[[:space:]]*//p' \
 		/etc/nightwatcher/nightwatcher.conf 2>/dev/null | tail -1)"
 	[ -n "${SCHEMA}" ] || SCHEMA=/usr/local/nightwatcher/sql/schema.sql
 	if [ -r "${SCHEMA}" ]; then
-		if mariadb nightwatcher < "${SCHEMA}" >/dev/null 2>&1; then
+		# Keep the error. Discarding it once cost an afternoon: the unit reported
+		# only "could not load", while MariaDB had been explaining precisely which
+		# constraint it refused and why.
+		if schema_err="$(mariadb nightwatcher < "${SCHEMA}" 2>&1)"; then
 			nw_log "schema loaded from ${SCHEMA} ($(mariadb -N -B -e \
 				"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='nightwatcher';" \
 				2>/dev/null || printf '?') tables)"
 		else
-			nw_warn "could not load ${SCHEMA}; the web UI's Database tab can finish this"
+			nw_warn "could not load ${SCHEMA}:"
+			printf '%s\n' "${schema_err}" | head -5 | while IFS= read -r line; do
+				nw_warn "  ${line}"
+			done
 		fi
 	else
 		nw_warn "no schema file at ${SCHEMA}; leaving the tables to the daemon"
