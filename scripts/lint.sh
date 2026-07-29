@@ -40,8 +40,10 @@ bash -n stage-nightwatcher/02-network/files/nw-common.sh ||
 
 # ---- python ---------------------------------------------------------------
 echo "[lint] python"
-python3 -m py_compile stage-nightwatcher/05-agent/files/nightwatcher-pi-agent ||
-	{ echo "[lint] the agent does not compile"; fail=1; }
+for py in stage-nightwatcher/05-agent/files/nightwatcher-pi-agent \
+           stage-nightwatcher/02-network/files/nw-redirect; do
+	python3 -m py_compile "$py" || { echo "[lint] $py does not compile"; fail=1; }
+done
 find . -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null || true
 
 # ---- javascript -----------------------------------------------------------

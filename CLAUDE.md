@@ -38,9 +38,11 @@ of its own. It is image build tooling plus system configuration.
 > - **First boot** derives `nightwatcher-<mac4>` from the wlan0 MAC, generates the
 >   per-unit database and SSH passwords, creates the database, applies the AP, and
 >   writes `/boot/firmware/nightwatcher-credentials.txt`.
-> - **Web UI reachability:** `https://nightwatcher.local` (Avahi alias, with a
->   best-effort 443 to 8080 redirect) and `https://192.168.4.1:8080`. The
->   self-signed certificate warns once.
+> - **Web UI reachability:** `https://nightwatcher.local` and
+>   `https://192.168.4.1`, served on 443 (the daemon is granted
+>   CAP_NET_BIND_SERVICE) with a socket-activated redirect on 80. A boot-time
+>   check falls back to 8080 if 443 cannot be bound, so a unit is never dark.
+>   The self-signed certificate warns once.
 > - **RPi tab:** a root agent on `/run/nightwatcher-platform.sock` exposing a fixed
 >   verb list, proxied by NightWatcher2's `/api/v1/platform/*` for admin sessions.
 >   All Pi-specific code, including the tab's JavaScript, lives here.

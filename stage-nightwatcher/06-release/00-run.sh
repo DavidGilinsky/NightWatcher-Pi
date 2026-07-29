@@ -50,7 +50,8 @@ cat > "${ROOTFS_DIR}/etc/motd" << 'EOF'
 
   NightWatcher-Pi sky quality meter appliance
 
-  This unit serves its own Wi-Fi network and the NightWatcher2 web UI.
+  This unit serves its own Wi-Fi network and the NightWatcher2 web UI at
+  https://nightwatcher.local (http:// redirects there).
   Its network name, passphrase, and recovery password are in
   /boot/firmware/nightwatcher-credentials.txt.
 

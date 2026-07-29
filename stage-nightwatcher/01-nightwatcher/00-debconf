@@ -29,7 +29,10 @@ nightwatcher nightwatcher/db_create boolean false
 # phone joining the access point can reach it. Bound off localhost, the daemon
 # requires a login for reads as well as writes.
 nightwatcher nightwatcher/api_bind string 0.0.0.0
-nightwatcher nightwatcher/api_port string 8080
+# 443, so the address a volunteer types carries no port suffix. The daemon is
+# unprivileged, so the appliance drop-in grants it CAP_NET_BIND_SERVICE. Must
+# match NW_WEB_PORT in versions.env; make check enforces that.
+nightwatcher nightwatcher/api_port string 443
 nightwatcher nightwatcher/api_tls boolean true
 
 # Started by first boot, once there is a database to talk to.

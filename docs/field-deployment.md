@@ -81,8 +81,8 @@ your network changed it).
 | Symptom | What to check |
 |---|---|
 | No `nightwatcher-...` network | `systemctl status nightwatcher-radio nightwatcher-ap`, then `journalctl -u nightwatcher-ap`. A wrong or unset Wi-Fi country stops the radio transmitting at all. |
-| Network is there, web UI is not | `systemctl status nightwatcherd`, then `journalctl -u nightwatcherd`. Try `https://192.168.4.1:8080` directly, which skips mDNS and the port redirect. |
-| `nightwatcher.local` does not resolve | Some Android versions do not do mDNS. Use `https://192.168.4.1:8080`. |
+| Network is there, web UI is not | `systemctl status nightwatcherd`, then `journalctl -u nightwatcherd`. Try `https://192.168.4.1` directly, which skips mDNS. `journalctl -u nightwatcher-webcheck` says whether the daemon got port 443 or fell back to 8080. |
+| `nightwatcher.local` does not resolve | Some Android versions do not do mDNS. Use `https://192.168.4.1`. |
 | Web UI says the database is unreachable | `journalctl -u nightwatcher-firstboot` shows what provisioning did. `sudo nightwatcher-provision --force` runs it again. |
 | USB drive is not picking anything up | The drive must be labelled `NWDATA`. `sudo /usr/local/lib/nightwatcher-pi/nw-usb.sh status`, then `journalctl -u nightwatcher-usb-sync`. |
 | Times look wrong | **RPi** tab, *Clock*, **Set clock from this device**. |

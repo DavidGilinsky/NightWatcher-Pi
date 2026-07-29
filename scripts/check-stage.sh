@@ -40,8 +40,12 @@ check "prerun.sh copies the previous stage" grep -q copy_previous "${STAGE}/prer
 echo "[check] units"
 mapfile -t units < <(find "${STAGE}" -name '*.service' -o -name '*.timer' | sort)
 for u in "${units[@]}"; do
-	check "has [Install] or is timer-started: $(basename "${u}")" \
-		bash -c "grep -q '^\[Install\]' '${u}' || [[ '${u}' == *usb-sync.service ]]"
+	# A socket-activated service is started by its .socket and correctly has no
+	# [Install] of its own; the same goes for the timer-started mirror. The unit
+	# path is passed as an argument, not interpolated, so the quoting stays sane.
+	# shellcheck disable=SC2016
+	check "has [Install], or is started by a socket or timer: $(basename "${u}")" \
+		bash -c 'grep -q "^\[Install\]" "$1" || [[ "$1" == *usb-sync.service ]] || test -f "${1%.service}.socket"' _ "${u}"
 	check "no Restart= on a Type=oneshot with always: $(basename "${u}")" \
 		bash -c "! (grep -q '^Type=oneshot' '${u}' && grep -q '^Restart=always' '${u}')"
 done
@@ -138,6 +142,22 @@ check "no padding hiding inside a preseed value" \
 	bash -c "! grep -qE '^nightwatcher .*[[:space:]]{2,}' '${STAGE}/01-nightwatcher/00-debconf'"
 check "every preseed line is well formed" \
 	bash -c "! grep -qvE '^(#.*)?\$|^nightwatcher nightwatcher/[a-z_]+ (password|string|boolean)( [^[:space:]]+)?\$' '${STAGE}/01-nightwatcher/00-debconf'"
+
+echo "[check] web port"
+# The port lives in versions.env; the preseed is a static file that has to
+# agree with it, and the documented URLs have to carry no port suffix.
+PORT="$(sed -n 's/^NW_WEB_PORT=//p' versions.env)"
+check "versions.env names a web port" test -n "${PORT}"
+check "the preseed asks for that port" \
+	grep -q "api_port string ${PORT}" "${STAGE}/01-nightwatcher/00-debconf"
+check "the daemon may bind it" \
+	grep -q 'AmbientCapabilities=CAP_NET_BIND_SERVICE' "${STAGE}/01-nightwatcher/files/pi-appliance.conf"
+check "port 80 redirects rather than being NATted to a TLS listener" \
+	test -f "${STAGE}/02-network/files/nightwatcher-redirect.socket"
+check "a boot-time check can recover an unbindable port" \
+	grep -q 'FALLBACK_PORT=8080' "${STAGE}/02-network/files/nw-webcheck.sh"
+check "no user-facing URL still carries a port suffix" \
+	bash -c "! grep -rn 'nightwatcher.local:8080\|192.168.4.1:8080' README.md docs/ '${STAGE}' 2>/dev/null | grep -q ."
 
 echo "[check] provenance"
 # /etc/nightwatcher-pi-release is only worth writing if it can be trusted, so

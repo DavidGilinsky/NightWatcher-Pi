@@ -228,8 +228,9 @@ Wi-Fi network (this unit is its own access point)
 
 Web UI (join the network above first)
   https://nightwatcher.local
-  https://${HOSTNAME}.local:8080
-  https://$(printf '%s' "${AP_ADDRESS:-192.168.4.1/24}" | cut -d/ -f1):8080
+  https://${HOSTNAME}.local
+  https://$(printf '%s' "${AP_ADDRESS:-192.168.4.1/24}" | cut -d/ -f1)
+  Plain http:// to any of these redirects to https automatically.
   The certificate is self-signed, so the browser warns once. That is expected.
   Sign in as 'admin' with password 'admin'; you must change it immediately.
 

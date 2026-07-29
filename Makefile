@@ -75,6 +75,7 @@ $(CONFIG): config/pi-gen.config.in versions.env | pi-gen
 	     -e 's|@AP_ADDRESS@|$(AP_ADDRESS)|g' \
 	     -e 's|@AP_CHANNEL@|$(AP_CHANNEL)|g' \
 	     -e 's|@PIGEN_REF@|$(PIGEN_REF)|g' \
+	     -e 's|@NW_WEB_PORT@|$(NW_WEB_PORT)|g' \
 	     config/pi-gen.config.in > $(CONFIG)
 	@chmod 600 $(CONFIG)
 	@echo "[config] wrote $(CONFIG)"

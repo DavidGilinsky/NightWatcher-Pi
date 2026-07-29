@@ -58,6 +58,9 @@ check "web UI bound to every interface" \
 check "web UI serves TLS" \
 	grep -Eq '^[[:space:]]*tls[[:space:]]*=[[:space:]]*on[[:space:]]*$' \
 	/etc/nightwatcher/nightwatcher.conf
+check "web UI is on the port the appliance documents" \
+	grep -Eq '^[[:space:]]*port[[:space:]]*=[[:space:]]*443[[:space:]]*$' \
+	/etc/nightwatcher/nightwatcher.conf
 
 if [ "${fails}" -ne 0 ]; then
 	echo "nightwatcher: ${fails} post-install check(s) failed; see above" >&2

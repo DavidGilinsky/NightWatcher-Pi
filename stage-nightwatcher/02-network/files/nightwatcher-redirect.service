@@ -1,0 +1,37 @@
+# ---------------------------------------------------------------------------
+# Author:        David Gilinsky
+# File:          /etc/systemd/system/nightwatcher-redirect.service
+# Purpose:       Send plain HTTP callers to the HTTPS web UI. Started by its
+#                socket, so it has no [Install] section of its own.
+# Created:       2026-07-29
+# Last Modified: 2026-07-29
+# Version:       0.1.0
+# License:       GPL-3.0-or-later
+# ---------------------------------------------------------------------------
+[Unit]
+Description=NightWatcher appliance HTTP to HTTPS redirect
+Requires=nightwatcher-redirect.socket
+After=nightwatcher-redirect.socket
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/nightwatcher-pi/web.env
+ExecStart=/usr/local/lib/nightwatcher-pi/nw-redirect
+Restart=on-failure
+RestartSec=5
+
+# It answers with a Location header and nothing else, so it gets nothing: no
+# user of its own, no writable filesystem, no capabilities, and no address
+# families beyond the socket it was handed.
+DynamicUser=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallFilter=@system-service

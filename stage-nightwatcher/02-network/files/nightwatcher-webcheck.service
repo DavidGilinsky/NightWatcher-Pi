@@ -1,0 +1,25 @@
+# ---------------------------------------------------------------------------
+# Author:        David Gilinsky
+# File:          /etc/systemd/system/nightwatcher-webcheck.service
+# Purpose:       Confirm the web UI is listening, and put the port back to 8080
+#                if binding 443 failed. The one thing an appliance must never do
+#                is come up with no way in.
+# Created:       2026-07-29
+# Last Modified: 2026-07-29
+# Version:       0.1.0
+# License:       GPL-3.0-or-later
+# ---------------------------------------------------------------------------
+[Unit]
+Description=NightWatcher appliance web UI reachability check
+After=nightwatcherd.service nightwatcher-firstboot.service
+Wants=nightwatcherd.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/lib/nightwatcher-pi/nw-webcheck.sh
+# It waits up to two minutes for a listener before deciding anything.
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

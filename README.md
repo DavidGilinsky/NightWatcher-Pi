@@ -15,8 +15,9 @@ collected either over the internet or on a USB drive carried home.
   `<mac4>` is the last 4 bytes of its own Wi-Fi MAC, so every unit in a network
   is distinct. The passphrase is the fleet default, changeable per unit.
 - Serves the NightWatcher2 web UI over HTTPS at **`https://nightwatcher.local`**
-  (also `https://192.168.4.1:8080`). The certificate is self-signed, so the
-  browser warns once.
+  (also `https://192.168.4.1`), on port 443 so the address carries no port
+  suffix. Plain `http://` redirects there. The certificate is self-signed, so
+  the browser warns once.
 - Adds an **RPi tab** to that web UI, present only on this hardware, covering
   everything the appliance owns: joining an upstream Wi-Fi network while the
   access point stays up, the USB data drive, and the clock.

@@ -1,0 +1,22 @@
+# ---------------------------------------------------------------------------
+# Author:        David Gilinsky
+# File:          /etc/systemd/system/nightwatcher-redirect.socket
+# Purpose:       Hold port 80 for the HTTP-to-HTTPS redirect. systemd opens the
+#                port as PID 1 and passes the descriptor to the service, so the
+#                service itself needs no privileges and no capability.
+# Created:       2026-07-29
+# Last Modified: 2026-07-29
+# Version:       0.1.0
+# License:       GPL-3.0-or-later
+# ---------------------------------------------------------------------------
+[Unit]
+Description=NightWatcher appliance HTTP redirect socket (port 80)
+
+[Socket]
+ListenStream=80
+# One listener handling every connection, rather than a service instance per
+# connection: the work is a 301 and nothing else.
+Accept=no
+
+[Install]
+WantedBy=sockets.target

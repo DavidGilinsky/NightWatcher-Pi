@@ -1,0 +1,100 @@
+#!/usr/bin/env python3
+# ---------------------------------------------------------------------------
+# Author:        David Gilinsky
+# File:          /usr/local/lib/nightwatcher-pi/nw-redirect
+# Purpose:       Answer plain HTTP on port 80 and send the caller to the HTTPS
+#                web UI. A volunteer who types the unit's name without a scheme
+#                gets http:// from most browsers; without this they would meet a
+#                connection refused and conclude the appliance is broken.
+#
+#                Socket-activated, so systemd (as PID 1) opens port 80 and hands
+#                the descriptor over. This process therefore needs neither root
+#                nor CAP_NET_BIND_SERVICE, and runs as a DynamicUser with no
+#                privileges of its own.
+# Created:       2026-07-29
+# Last Modified: 2026-07-29
+# Version:       0.1.0
+# License:       GPL-3.0-or-later
+# ---------------------------------------------------------------------------
+"""Redirect http://<unit>/... to https://<unit>/... for the appliance web UI."""
+
+import http.server
+import os
+import socket
+import socketserver
+import sys
+
+# systemd hands the first listening socket over as descriptor 3.
+SD_LISTEN_FDS_START = 3
+
+HTTPS_PORT = int(os.environ.get("NW_WEB_PORT", "443"))
+FALLBACK_HOST = os.environ.get("NW_FALLBACK_HOST", "nightwatcher.local")
+
+
+def log(message):
+    print(message, file=sys.stderr, flush=True)
+
+
+class Redirect(http.server.BaseHTTPRequestHandler):
+    server_version = "nightwatcher-redirect/0.1.0"
+    protocol_version = "HTTP/1.1"
+
+    def _redirect(self):
+        # Reflect whatever name the caller used, so nightwatcher.local,
+        # nightwatcher-<mac4>.local and the bare access-point address each stay
+        # on the name the volunteer actually typed. Any port in the Host header
+        # is dropped: it is this listener's port, not the web UI's.
+        host = (self.headers.get("Host") or "").split(":")[0].strip() or FALLBACK_HOST
+        suffix = "" if HTTPS_PORT == 443 else ":%d" % HTTPS_PORT
+        target = "https://%s%s%s" % (host, suffix, self.path or "/")
+        self.send_response(301)
+        self.send_header("Location", target)
+        self.send_header("Content-Length", "0")
+        self.send_header("Connection", "close")
+        self.end_headers()
+
+    do_GET = _redirect
+    do_HEAD = _redirect
+    do_POST = _redirect
+
+    def log_message(self, fmt, *args):
+        # Every captive-portal probe on the access point hits this. Logging each
+        # one would bury anything worth reading in the journal.
+        pass
+
+
+class Server(socketserver.ThreadingTCPServer):
+    daemon_threads = True
+    allow_reuse_address = True
+
+    def __init__(self, addr, handler, fd=None):
+        super().__init__(addr, handler, bind_and_activate=False)
+        if fd is None:
+            self.server_bind()
+            self.server_activate()
+        else:
+            self.socket.close()  # discard the unbound socket the base class made
+            self.socket = socket.socket(fileno=fd)
+
+
+def main():
+    fd = None
+    if int(os.environ.get("LISTEN_FDS", "0")) >= 1:
+        fd = SD_LISTEN_FDS_START
+        log("redirect: using the socket systemd passed us")
+    else:
+        # Standalone, for testing from a checkout. Needs privileges for port 80.
+        log("redirect: no socket passed; binding port 80 directly")
+
+    server = Server(("", 80), Redirect, fd=fd)
+    log("redirect: sending plain HTTP to https on port %d" % HTTPS_PORT)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
+
+
+if __name__ == "__main__":
+    main()
