@@ -184,11 +184,31 @@ path-traversal rejection, and the socket-absent case. It needs no database.
 - **Access point and client share a channel.** Joining an upstream network
   briefly drops AP clients, and a 5 GHz uplink may leave the AP unable to follow.
   Ethernet or a USB Wi-Fi dongle avoids it entirely.
-- **The `.deb` is only as pinned as its release.** Until NightWatcher2 tags one,
-  `fetch-nightwatcher-deb.sh` falls back to a CI artifact and says so loudly.
+- **The `.deb` is pinned to a release** and verified against its checksum. Where
+  no such release exists, `fetch-nightwatcher-deb.sh` falls back to a CI artifact
+  and says so loudly, and the release stamp records which of the two was used.
 - **The CM5 must be a wireless variant with an antenna attached.** Without a
   radio the entire access-point premise is moot, and the failure is easy to
   discover late.
-- **No image has been booted on hardware yet.** Everything here is verified by
-  static checks and by exercising the agent and the proxy against each other on a
-  development machine.
+- **Not everything has run on hardware.** Confirmed on a CM5: first boot and
+  provisioning, the access point, reading a real SQM over USB, the web UI, and
+  joining an upstream Wi-Fi network from the RPi tab (which exercises the whole
+  platform chain: the agent's socket, the daemon's proxy, and the tab's own
+  module). Still unexercised: the USB data mirror end to end, setting the clock
+  from a browser, and changing the access point's SSID or passphrase from the
+  tab.
+
+## What hardware found that static checks did not
+
+Seven defects surfaced only by putting an image on a Compute Module and reading
+its journal: a masked `fake-hwclock.service` that failed the build, debconf
+column padding that silently prefixed every value with a space, a systemd
+deadlock between first boot and the units ordered after it, a re-provision that
+replaced a working database password with an unverified one, a daemon that could
+not bootstrap an empty database, a unit identity one character too long, and a
+USB mirror that reported a drive on every unit that had none.
+
+The structural checks in `make check` caught none of these, and now guard all of
+them. That is the pattern worth keeping: each hardware finding becomes an
+assertion that runs in a second, so the next regression is caught before a
+build, not after a drive to a dark site.
