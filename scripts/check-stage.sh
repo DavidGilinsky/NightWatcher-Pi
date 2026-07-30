@@ -168,6 +168,21 @@ check "a boot-time check can recover an unbindable port" \
 check "no user-facing URL still carries a port suffix" \
 	bash -c "! grep -rn 'nightwatcher.local:8080\|192.168.4.1:8080' README.md docs/ '${STAGE}' 2>/dev/null | grep -q ."
 
+echo "[check] the bare name"
+# https://nightwatcher needs the name to resolve on the AP network and the
+# certificate to claim it. Both are first boot's job, and neither is visible
+# until a browser complains, so assert them here.
+check "first boot writes the access-point DNS mapping" \
+	grep -q 'address=/nightwatcher/' "${STAGE}/03-firstboot/files/nightwatcher-firstboot.sh"
+check "the certificate claims the bare name" \
+	grep -q 'subjectAltName=DNS:nightwatcher,' "${STAGE}/03-firstboot/files/nightwatcher-firstboot.sh"
+check "the daemon is pointed at that certificate" \
+	grep -q 'api tls_cert' "${STAGE}/03-firstboot/files/nightwatcher-firstboot.sh"
+check "a failed certificate leaves the daemon able to make its own" \
+	grep -q 'the daemon will make its own' "${STAGE}/03-firstboot/files/nightwatcher-firstboot.sh"
+check "the unit reports if NetworkManager ignored the DNS snippet" \
+	grep -q 'did not pass ${NM_DNSMASQ_DIR}' "${STAGE}/02-network/files/nw-webcheck.sh"
+
 echo "[check] provenance"
 # /etc/nightwatcher-pi-release is only worth writing if it can be trusted, so
 # it must report the package source the fetch recorded, never the version the

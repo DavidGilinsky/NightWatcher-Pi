@@ -14,10 +14,11 @@ collected either over the internet or on a USB drive carried home.
 - Comes up as a wireless access point named **`nightwatcher-<mac4>`**, where
   `<mac4>` is the last 4 bytes of its own Wi-Fi MAC, so every unit in a network
   is distinct. The passphrase is the fleet default, changeable per unit.
-- Serves the NightWatcher2 web UI over HTTPS at **`https://nightwatcher.local`**
-  (also `https://192.168.4.1`), on port 443 so the address carries no port
-  suffix. Plain `http://` redirects there. The certificate is self-signed, so
-  the browser warns once.
+- Serves the NightWatcher2 web UI over HTTPS at **`https://nightwatcher`** from
+  the access point (also `https://nightwatcher.local` and `https://192.168.4.1`),
+  on port 443 so the address carries no port suffix. Plain `http://` redirects
+  there. The certificate names all of those, and is self-signed, so the browser
+  warns once about the issuer and not about the name.
 - Adds an **RPi tab** to that web UI, present only on this hardware, covering
   everything the appliance owns: joining an upstream Wi-Fi network while the
   access point stays up, the USB data drive, and the clock.

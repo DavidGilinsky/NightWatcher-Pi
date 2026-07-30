@@ -191,12 +191,18 @@ path-traversal rejection, and the socket-absent case. It needs no database.
   radio the entire access-point premise is moot, and the failure is easy to
   discover late.
 - **Not everything has run on hardware.** Confirmed on a CM5: first boot and
-  provisioning, the access point, reading a real SQM over USB, the web UI, and
+  provisioning, the access point, reading a real SQM over USB, the web UI,
   joining an upstream Wi-Fi network from the RPi tab (which exercises the whole
   platform chain: the agent's socket, the daemon's proxy, and the tab's own
-  module). Still unexercised: the USB data mirror end to end, setting the clock
-  from a browser, and changing the access point's SSID or passphrase from the
-  tab.
+  module), and `https://nightwatcher` from a tablet joined to the access point,
+  on 443 with no port suffix. Still unexercised: the USB data mirror end to end,
+  setting the clock from a browser, and changing the access point's SSID or
+  passphrase from the tab.
+- **A domain-joined Windows client is not a good test device.** Network Location
+  Awareness tries to authenticate the appliance's network against a domain
+  controller it cannot reach, which leaves the network unclassifiable and can
+  make the client drop it every twenty seconds. Nothing on the unit causes it
+  and nothing on the unit can fix it.
 
 ## What hardware found that static checks did not
 

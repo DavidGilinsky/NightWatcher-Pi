@@ -21,6 +21,10 @@ NWPI_STATE=/var/lib/nightwatcher-pi
 NWPI_SPOOL="${NWPI_STATE}/spool"
 NWPI_PROVISIONED="${NWPI_STATE}/.provisioned"
 NWPI_SOCKET=/run/nightwatcher-platform.sock
+NWPI_TLS_DIR="${NWPI_ETC}/tls"
+NWPI_TLS_CERT="${NWPI_TLS_DIR}/nightwatcher-cert.pem"
+NWPI_TLS_KEY="${NWPI_TLS_DIR}/nightwatcher-key.pem"
+NM_DNSMASQ_DIR=/etc/NetworkManager/dnsmasq-shared.d
 BOOT_DIR=/boot/firmware
 BOOT_SITE="${BOOT_DIR}/nightwatcher-site.txt"
 BOOT_CREDS="${BOOT_DIR}/nightwatcher-credentials.txt"
@@ -56,6 +60,17 @@ nw_set_conf() {
 	printf "%s='%s'\n" "${key}" "$(printf '%s' "${val}" | sed "s/'/'\\\\''/g")" >> "${tmp}"
 	chmod 600 "${tmp}"
 	mv "${tmp}" "${NWPI_CONF}"
+}
+
+# Set KEY = VALUE inside [SECTION] of an INI file. Section-aware because
+# [database] and [api] both carry a `port`, and a blind sed rewrites the wrong
+# one. Mirrors what NightWatcher2's own postinst does to the same file.
+nw_set_ini() {  # nw_set_ini FILE SECTION KEY VALUE
+	awk -v sec="$2" -v key="$3" -v val="$4" '
+		/^[[:space:]]*\[/ { insec = ($0 ~ ("^[[:space:]]*\\[" sec "\\]")) }
+		insec && $0 ~ ("^[[:space:]]*" key "[[:space:]]*=") { print key " = " val; next }
+		{ print }
+	' "$1" > "$1.nwtmp" && mv "$1.nwtmp" "$1"
 }
 
 # The wireless interface that carries the access point. The image adds a

@@ -30,17 +30,19 @@ CONF=/etc/nightwatcher/nightwatcher.conf
 PORT="${NW_WEB_PORT:-443}"
 FALLBACK_PORT=8080
 
-# Set KEY = VALUE inside [SECTION]. Section-aware because [database] and [api]
-# both have a `port`, and a blind sed would rewrite the wrong one.
-set_ini() {  # set_ini FILE SECTION KEY VALUE
-	awk -v sec="$2" -v key="$3" -v val="$4" '
-		/^[[:space:]]*\[/ { insec = ($0 ~ ("^[[:space:]]*\\[" sec "\\]")) }
-		insec && $0 ~ ("^[[:space:]]*" key "[[:space:]]*=") { print key " = " val; next }
-		{ print }
-	' "$1" > "$1.nwtmp" && mv "$1.nwtmp" "$1"
-}
-
 listening_on() { ss -tlnH "sport = :$1" 2>/dev/null | grep -q .; }
+
+# https://nightwatcher only resolves if NetworkManager handed our snippet to the
+# dnsmasq it runs for the access point. That behaviour is a NetworkManager
+# implementation detail, so check it rather than assume it: if the snippet did
+# not reach dnsmasq, the bare name silently fails while nightwatcher.local keeps
+# working, and the operator has no way to tell those apart from a browser.
+if pgrep -af "dnsmasq.*dnsmasq-shared[.]d" >/dev/null 2>&1; then
+	nw_log "access-point DNS is configured from ${NM_DNSMASQ_DIR}"
+elif [ -f "${NM_DNSMASQ_DIR}/10-nightwatcher.conf" ]; then
+	nw_warn "NetworkManager did not pass ${NM_DNSMASQ_DIR} to its dnsmasq:"
+	nw_warn "  https://nightwatcher will not resolve; use https://nightwatcher.local or the address"
+fi
 
 # The daemon has to start, connect to the database, and generate a certificate
 # before it binds anything, so give it a couple of minutes on a cold boot.
@@ -86,7 +88,7 @@ fi
 
 nw_warn "falling back to port ${FALLBACK_PORT} so the unit stays reachable"
 if [ -w "${CONF}" ]; then
-	set_ini "${CONF}" api port "${FALLBACK_PORT}"
+	nw_set_ini "${CONF}" api port "${FALLBACK_PORT}"
 	nw_set_conf NW_WEB_PORT "${FALLBACK_PORT}"
 	systemctl restart --no-block nightwatcherd.service
 	nw_warn "the web UI will come back at https://<unit>:${FALLBACK_PORT} — check that CAP_NET_BIND_SERVICE reached nightwatcherd"
